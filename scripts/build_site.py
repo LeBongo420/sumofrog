@@ -31,10 +31,10 @@ def font_face(family, file):
 CSS = """
 :root { --navy:#0e1030; --navy2:#1e2660; --purple:#581c70; --magenta:#ff248c; --pink:#ff78be;
         --yellow:#ffe440; --white:#fffaf0; --grey:#a0a0b8; --black:#000; --neon:#78ff60; --orange:#ff9238;
-        --pixel:"Press Start 2P", monospace; --body:"DotGothic16", "Segoe UI", sans-serif; }
+        --pixel:"Press Start 2P", monospace; --body:"VT323", "Press Start 2P", monospace; }
 * { box-sizing:border-box; }
 html { background:var(--black); }
-body { margin:0; color:var(--white); font-family:var(--body); font-size:18px; line-height:1.7;
+body { margin:0; color:var(--white); font-family:var(--body); font-size:22px; line-height:1.55;
        background:var(--navy); min-height:100vh; }
 .wrap { max-width:960px; margin:0 auto; background:var(--navy); box-shadow:0 0 0 4px var(--black), 0 0 0 8px var(--magenta); }
 .hero { display:block; width:100%; image-rendering:pixelated; border-bottom:4px solid var(--black); }
@@ -72,12 +72,12 @@ main p > img { display:block; margin:1em 0 .3em; border:4px solid var(--black); 
 .logo { float:right; width:128px; height:128px; image-rendering:pixelated; margin:0 0 1em 1.5em; }
 footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(--grey); font-size:15px; }
 @media (max-width:640px) { main { padding:18px 16px 28px; } h1 { font-size:18px; } h2 { font-size:13px; }
-  .logo { width:84px; height:84px; } nav a, nav span.tag { font-size:11px; } body { font-size:17px; } }
+  .logo { width:84px; height:84px; } nav a, nav span.tag { font-size:11px; } body { font-size:20px; } }
 """
 
 
 def page(title, nav, body, foot="", script=""):
-    fonts = font_face("Press Start 2P", "PressStart2P-latin.woff2") + "\n" + font_face("DotGothic16", "DotGothic16-latin.woff2")
+    fonts = font_face("Press Start 2P", "PressStart2P-latin.woff2") + "\n" + font_face("VT323", "VT323-latin.woff2")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title><link rel="icon" href="sumo_logo.png">

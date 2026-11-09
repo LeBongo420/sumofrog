@@ -1,2 +1,3 @@
-Press Start 2P (CodeMan38) and DotGothic16 (Fontworks), both from Google Fonts under the
+Press Start 2P (CodeMan38) and VT323 (Peter Hull), both from Google Fonts under the
 SIL Open Font License 1.1 (https://openfontlicense.org). Subset to Latin characters as woff2.
+Body text uses VT323 so all copy is pixel-style (replaces DotGothic16).
