@@ -2,7 +2,7 @@
   "name": "Sumo Frog",
   "symbol": "SUMO",
   "description": "A toy proof-of-work token on a private Solana test network (and later devnet). Worthless, for learning only. Mascot: an 8-bit sumo frog.",
-  "image": "http://127.0.0.1:8080/sumo_frog.png",
+  "image": "http://YOUR_SERVER:8080/sumo_frog.png",
   "attributes": [
     {
       "trait_type": "network",

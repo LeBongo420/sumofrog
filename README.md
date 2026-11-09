@@ -12,7 +12,7 @@ Oracle server (public devnet later, once the devnet faucet works for us).
 | Program ID | `6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW` |
 | Token mint | `7VNZhAWFCKjrZVKcbU2sXxT5mNAbzYh8qmtD7HfePabR` |
 | Game state | `AjCSGvVNV2FcDxGjMQbc2QEuJMx144XpuivkDX4e4Pad` |
-| Network | private Sumo test network (genesis `9eDPpAG4RUei7HTciCEucnshXm6Rfo61d6KU8hyXwx6n`); the RPC address is in `miner/sumo_config.json` |
+| Network | private Sumo test network (genesis `9eDPpAG4RUei7HTciCEucnshXm6Rfo61d6KU8hyXwx6n`); the RPC address is in `miner/sumo_config.json` (copy from `miner/sumo_config.example.json` — same for `stats/sumo_config.example.js` and `assets/metadata.example.json`) |
 | Stats page | the gateway's front page (same address as the RPC, port 8080) |
 | Encryption | none yet: the private test link is plain `http` until launch (Josh, 2 Nov 2026). The miner says so at startup and before any withdraw |
 
@@ -22,6 +22,19 @@ Mascot: an 8-bit sumo frog (v4 look: pixel art, synthwave sunset, high contrast)
 `mockups_8bit/v4/art.py`, `scripts/make_miner_art.py` and `scripts/build_site.py`.
 
 Docs: [whitepaper](docs/whitepaper.md) · [mining guide](docs/mining-guide.md) · [payout address](docs/payout-address.md).
+
+## Local config
+
+This repo ships **example** configs only (no private server address):
+
+```bash
+cp miner/sumo_config.example.json miner/sumo_config.json
+cp stats/sumo_config.example.js stats/sumo_config.js
+cp assets/metadata.example.json assets/metadata.json
+```
+
+Then edit `YOUR_SERVER` in those files to your own test gateway. The real files are gitignored.
+
 
 ## The rules
 
