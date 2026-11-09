@@ -1,0 +1,2 @@
+59
+# Minimum number of passing tests (Rust unit + TS integration). Only ever raise this.

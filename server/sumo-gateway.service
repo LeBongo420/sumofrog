@@ -1,0 +1,22 @@
+[Unit]
+Description=Sumo Frog gateway (filtered JSON-RPC + faucet + stats page for the PRIVATE test validator)
+After=sumo-validator.service
+Wants=sumo-validator.service
+
+[Service]
+User=ubuntu
+WorkingDirectory=/home/ubuntu/sumo/gateway
+ExecStart=/usr/bin/python3 -u /home/ubuntu/sumo/gateway/sumo_gateway.py
+Environment=SUMO_GATEWAY_PORT=8080 SUMO_UPSTREAM=http://127.0.0.1:8899
+Restart=always
+RestartSec=5
+Nice=10
+CPUQuota=25%
+MemoryMax=256M
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

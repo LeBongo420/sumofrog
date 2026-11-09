@@ -1,0 +1,8 @@
+[Unit]
+Description=Rotate the Sumo Frog test validator log (logrotate, copytruncate)
+
+[Service]
+Type=oneshot
+Nice=19
+IOSchedulingClass=idle
+ExecStart=/usr/sbin/logrotate --state /var/lib/logrotate/sumo-status /etc/logrotate-sumo.conf

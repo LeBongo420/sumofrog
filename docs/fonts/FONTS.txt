@@ -1,0 +1,2 @@
+Press Start 2P (CodeMan38) and DotGothic16 (Fontworks), both from Google Fonts under the
+SIL Open Font License 1.1 (https://openfontlicense.org). Subset to Latin characters as woff2.

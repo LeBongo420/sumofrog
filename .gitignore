@@ -1,0 +1,53 @@
+.anchor
+.DS_Store
+target
+**/*.rs.bk
+node_modules
+test-ledger
+.yarn
+# never commit keys
+.keys/
+*keypair*.json
+miner/sumo-devnet-key.json
+.anchor
+__pycache__/
+dist/
+.venv/
+miner/payout-address.txt
+
+# secrets and local config (never push)
+.env
+.env.*
+!.env.example
+*.pem
+id.json
+**/id.json
+keypairs/
+**/*wallet*.json
+miner/sumo_config.json
+stats/sumo_config.js
+assets/metadata.json
+
+# build / ledger / deps (also keep existing)
+.anchor/
+target/
+node_modules/
+test-ledger/
+test-ledger-*/
+.yarn/
+__pycache__/
+dist/
+.venv/
+*.zip
+miner/*.zip
+
+# data, logs, CSVs
+data/
+**/data/
+*.csv
+*.log
+logs/
+**/logs/
+
+# local screenshots / previews that may be regenerated
+docs/screens/home-preview.png

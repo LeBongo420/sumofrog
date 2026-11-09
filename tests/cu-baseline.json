@@ -1,0 +1,10 @@
+{
+  "_note": "Compute units used by `mine` / `mine_to`, measured 2026-10-30, re-measured 2026-10-31 (retarget overflow guard, +4/-4) and 2026-11-01 (mine and mine_to share one code path, +10; mine_to added) on a local solana-test-validator (Agave 4.3.2) with the fixed test keys in tests/sumofrog.ts. The test fails if a sample goes more than 5% over. Update after a deliberate change.",
+  "mine": {
+    "mine_first_creates_ata": 35014,
+    "mine_existing_ata": 17246,
+    "mine_with_retarget": 19796,
+    "mine_to_first_creates_ata": 44544,
+    "mine_to_existing_ata": 20622
+  }
+}
