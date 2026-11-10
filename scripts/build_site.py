@@ -5,7 +5,8 @@
   docs/mining-guide.md -> docs/mining-guide.html
   (template below)     -> docs/index.html    (home page)
   (template below)     -> stats/index.html   (the stats page served by the Sumo gateway)
-  mockups_8bit/v4      -> header + logo images in docs/, stats/ and assets/
+  mockups_8bit/v4      -> home header + metadata frog in docs/, stats/ and assets/
+  art/pixy             -> per-page headers, $SUMO token logo and favicons
 
 Fonts (Press Start 2P, DotGothic16, SIL OFL) are embedded in each page, so every page is one
 self-contained file plus its images. Usage: python3 scripts/build_site.py  (needs `markdown`, Pillow)
@@ -37,7 +38,7 @@ html { background:var(--black); }
 body { margin:0; color:var(--white); font-family:var(--body); font-size:22px; line-height:1.55;
        background:var(--navy); min-height:100vh; }
 .wrap { max-width:960px; margin:0 auto; background:var(--navy); box-shadow:0 0 0 4px var(--black), 0 0 0 8px var(--magenta); }
-.hero { display:block; width:100%; image-rendering:pixelated; border-bottom:4px solid var(--black); }
+.hero { display:block; width:100%; height:auto; image-rendering:pixelated; border-bottom:4px solid var(--black); }
 nav { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; background:var(--navy);
       border-bottom:4px solid var(--magenta); }
 nav a, nav span.tag { font-family:var(--pixel); font-size:14px; line-height:1; padding:9px 10px; color:var(--white);
@@ -76,15 +77,40 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 """
 
 
-def page(title, nav, body, foot="", script=""):
+DEFAULT_HEADER = (
+    "sumo_header.png",
+    "SUMO: the frog you mine. An 8-bit sumo frog under a synthwave sunset, with a torii gate, a pagoda and a cherry tree.",
+    960, 144,
+)
+GUIDE_HEADER = (
+    "header_guide.jpg",
+    "SUMO mining guide. An 8-bit sumo frog holding a pickaxe and a book, under a synthwave sunset with a torii gate, a pagoda and a cherry blossom tree.",
+    1200, 675,
+)
+PAPER_HEADER = (
+    "header_whitepaper.jpg",
+    "SUMO whitepaper. An 8-bit sumo frog wearing glasses and holding a paper, next to the $SUMO token (a navy coin with a teal-to-purple rim and a cream belt knot), under a synthwave sunset with a torii gate and pagoda.",
+    1200, 675,
+)
+STATS_HEADER = (
+    "header_stats.jpg",
+    "SUMO network stats. An 8-bit sumo frog with arms raised next to a computer showing a chart and a coin, under a synthwave sunset with a torii gate, a pagoda and a cherry blossom tree.",
+    1200, 675,
+)
+
+
+def page(title, nav, body, foot="", script="", header=None):
+    src, alt, width, height = header or DEFAULT_HEADER
     fonts = font_face("Press Start 2P", "PressStart2P-latin.woff2") + "\n" + font_face("VT323", "VT323-latin.woff2")
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>{title}</title><link rel="icon" href="sumo_logo.png">
+<title>{title}</title>
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
 <style>{fonts}
 {CSS}</style></head>
 <body><div class="wrap">
-<img class="hero" src="sumo_header.png" alt="SUMO: the frog you mine. An 8-bit sumo frog under a synthwave sunset, with a torii gate, a pagoda and a cherry tree." width="960" height="144">
+<img class="hero" src="{src}" alt="{alt}" width="{width}" height="{height}">
 <nav>{nav}<span class="tag">TESTNET</span></nav>
 <main>
 {body}
@@ -100,15 +126,15 @@ def docs_nav(current):
     return "".join(f'<a href="{h}"{" aria-current=page" if h == current else ""}>{t}</a>' for h, t in items)
 
 
-def md_page(src, out, title, foot=""):
+def md_page(src, out, title, foot="", header=None):
     body = markdown.markdown(open(os.path.join(ROOT, "docs", src), encoding="utf-8").read(), extensions=["tables"])
-    body = '<img class="logo" src="sumo_logo.png" alt="" width="128" height="128">\n' + body
-    html = page(title, docs_nav(out), body, foot)
+    body = '<img class="logo" src="sumo_logo.png" alt="The $SUMO token: a dark navy coin with a teal-to-purple rim and a cream sumo belt knot." width="128" height="128">\n' + body
+    html = page(title, docs_nav(out), body, foot, header=header)
     open(os.path.join(ROOT, "docs", out), "w", encoding="utf-8").write(html)
     print("wrote docs/" + out)
 
 
-STATS_BODY = """<img class="logo" src="sumo_logo.png" alt="" width="128" height="128">
+STATS_BODY = """<img class="logo" src="sumo_logo.png" alt="The $SUMO token: a dark navy coin with a teal-to-purple rim and a cream sumo belt knot." width="128" height="128">
 <h1>SUMO FROG ($SUMO)</h1>
 <h3>A toy proof-of-work token on a Solana test network</h3>
 <blockquote><p><strong>TEST CHAIN</strong> Network: <span id="net">...</span>. Test SUMO is worthless and can't be bought or sold.</p></blockquote>
@@ -178,7 +204,7 @@ refresh(); setInterval(refresh, 20000);
 
 
 
-HOME_BODY = """<img class="logo" src="sumo_logo.png" alt="Sumo Frog pixel logo" width="128" height="128">
+HOME_BODY = """<img class="logo" src="sumo_logo.png" alt="The $SUMO token: a dark navy coin with a teal-to-purple rim and a cream sumo belt knot." width="128" height="128">
 <h1>SUMO FROG ($SUMO)</h1>
 <h3>The frog you mine. A fair-launch proof-of-work coin on Solana.</h3>
 <blockquote><p><strong>NOT LAUNCHED</strong> $SUMO currently lives only on a <strong>private test network</strong>
@@ -230,19 +256,38 @@ def stats_page():
     CSS = base + STATS_CSS
     nav = '<a href="../docs/index.html">HOME</a><a href="./" aria-current=page>STATS</a>'
     foot = 'Program <a id="plink"></a> &middot; Mint <a id="mlink"></a> &middot; refreshes every 20s<br>'
-    html = page("SUMO FROG ($SUMO) stats", nav, STATS_BODY, foot, STATS_SCRIPT)
+    html = page("SUMO FROG ($SUMO) stats", nav, STATS_BODY, foot, STATS_SCRIPT, header=STATS_HEADER)
     CSS = base
     open(os.path.join(ROOT, "stats", "index.html"), "w", encoding="utf-8").write(html)
     print("wrote stats/index.html")
 
 
+def save_jpeg(src, dest, max_w=1200, quality=85):
+    im = Image.open(src).convert("RGB")
+    if im.width > max_w:
+        height = int(round(im.height * max_w / im.width))
+        im = im.resize((max_w, height), Image.Resampling.LANCZOS)
+    im.save(dest, "JPEG", quality=quality, optimize=True)
+
+
 def images():
+    pixy = os.path.join(ROOT, "art", "pixy")
     hdr = Image.open(os.path.join(V4, "site_header.png")).convert("RGB").crop((0, 0, 960, 144))
     frog = Image.open(os.path.join(V4, "sumo_frog_512.png")).convert("RGBA")
-    logo = frog.resize((256, 256), Image.NEAREST)
+    # Pixy's $SUMO token: favicon and small logo. Home still uses the thin v4 header.
+    # The frog stays the mascot (headers + metadata image), not the token.
+    token_256 = os.path.join(pixy, "token_256.png")
+    token_32 = os.path.join(pixy, "token_32.png")
+    token_16 = os.path.join(pixy, "token_16.png")
     for d in ("docs", "stats"):
-        hdr.save(os.path.join(ROOT, d, "sumo_header.png"), optimize=True)
-        logo.save(os.path.join(ROOT, d, "sumo_logo.png"), optimize=True)
+        dest = os.path.join(ROOT, d)
+        hdr.save(os.path.join(dest, "sumo_header.png"), optimize=True)
+        shutil.copy(token_256, os.path.join(dest, "sumo_logo.png"))
+        shutil.copy(token_32, os.path.join(dest, "favicon-32.png"))
+        shutil.copy(token_16, os.path.join(dest, "favicon-16.png"))
+    save_jpeg(os.path.join(pixy, "header_guide.jpg"), os.path.join(ROOT, "docs", "header_guide.jpg"))
+    save_jpeg(os.path.join(pixy, "header_whitepaper.jpg"), os.path.join(ROOT, "docs", "header_whitepaper.jpg"))
+    save_jpeg(os.path.join(pixy, "header_stats.jpg"), os.path.join(ROOT, "stats", "header_stats.jpg"))
     # token metadata image (the gateway serves it as /sumo_frog.png): 512px pixel frog on navy
     meta = Image.new("RGBA", (512, 512), (14, 16, 48, 255))
     meta.alpha_composite(frog)
@@ -254,6 +299,6 @@ def images():
 if __name__ == "__main__":
     images()
     home_page()
-    md_page("whitepaper.md", "whitepaper.html", "SUMO FROG ($SUMO) whitepaper (draft)")
-    md_page("mining-guide.md", "mining-guide.html", "How to mine SUMO FROG ($SUMO)")
+    md_page("whitepaper.md", "whitepaper.html", "SUMO FROG ($SUMO) whitepaper (draft)", header=PAPER_HEADER)
+    md_page("mining-guide.md", "mining-guide.html", "How to mine SUMO FROG ($SUMO)", header=GUIDE_HEADER)
     stats_page()

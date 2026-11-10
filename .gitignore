@@ -53,3 +53,6 @@ logs/
 
 # local screenshots / previews that may be regenerated
 docs/screens/home-preview.png
+docs/screens/guide-preview.png
+docs/screens/stats-preview.png
+docs/screens/whitepaper-preview.png
