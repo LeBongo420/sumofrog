@@ -8,14 +8,17 @@ First time on this PC (or updating the old folder)
    existing miner folder if you're updating, and say "Replace the files" if Windows asks.
    Your wallet file sumo-devnet-key.json is NOT in the zip, so it stays as it is.
    Never delete it: it holds your test SUMO.
-4. Open that folder and double-click  Mine SUMO.bat
-5. If Windows asks whether to run it, click "Run". If it says "Windows protected your PC",
+4. In that folder, copy sumo_config.example.json to sumo_config.json (if you
+   don't already have one). Open sumo_config.json and replace YOUR_SERVER with
+   the test gateway address you were given. The miner cannot connect until you do.
+5. Open that folder and double-click  Mine SUMO.bat
+6. If Windows asks whether to run it, click "Run". If it says "Windows protected your PC",
    click "More info" then "Run anyway". (It's a plain text script: right-click it and
    choose "Edit" to see exactly what it does.)
-6. The first run sets itself up for a minute. Then mining starts.
+7. The first run sets itself up for a minute. Then mining starts.
    The box on the right says  >> MINING...  while it works, and
    *** BLOCK FOUND! +20 SUMO ***  when you win a block.
-7. To stop, close the window or press Ctrl+C.
+8. To stop, close the window or press Ctrl+C.
 
 What the numbers mean
 - BLOCK       the block everyone is racing for right now
