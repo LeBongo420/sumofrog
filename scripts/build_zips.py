@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 """Build docs/downloads/sumo-miner-v<version>.zip from the miner folder.
 
-Flat zip (no folders). Includes the example config only — never the real
-sumo_config.json, keys, keypairs, or a server address.
+Flat zip (no folders). Packed from git (committed tracked files only),
+never the working tree, so ignored sumo_config.json, keys and keypairs
+cannot be included. The example config is packed; the real config is not.
 Usage: python3 scripts/build_zips.py
 """
 import hashlib
 import os
 import re
+import subprocess
 import zipfile
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -37,8 +39,19 @@ KEYPAIR = re.compile(rb"\[\s*(?:\d{1,3}\s*,\s*){31,}\d{1,3}\s*\]")
 PEM = re.compile(rb"-----BEGIN (?:RSA |OPENSSH |EC )?" + rb"PRIVATE KEY-----")
 
 
+def git_show(relpath):
+    """Return the committed bytes of a tracked file (never working-tree or ignored copies)."""
+    r = subprocess.run(
+        ["git", "-C", ROOT, "show", f"HEAD:{relpath}"],
+        capture_output=True,
+    )
+    if r.returncode != 0:
+        raise SystemExit(f"refusing to pack untracked or uncommitted file: {relpath}")
+    return r.stdout
+
+
 def version():
-    text = open(os.path.join(MINER, "sumo_miner.py"), encoding="utf-8").read()
+    text = git_show("miner/sumo_miner.py").decode("utf-8")
     m = re.search(r'^VERSION\s*=\s*"v?([^"]+)"', text, re.M)
     if not m:
         raise SystemExit("VERSION not found in sumo_miner.py")
@@ -81,10 +94,7 @@ def build():
     ip = oracle_ip()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for f in FILES:
-            path = os.path.join(MINER, f)
-            if not os.path.isfile(path):
-                raise SystemExit(f"missing {f}")
-            data = open(path, "rb").read()
+            data = git_show(f"miner/{f}")
             check_payload(f, data, ip)
             # flat name only — no directories, no usernames
             if os.path.basename(f) != f or "/" in f or "\\" in f:

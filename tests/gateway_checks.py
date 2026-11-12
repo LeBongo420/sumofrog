@@ -36,6 +36,14 @@ def main():
     open(outside, "w").write("OUTSIDE")
     link = os.path.join(www, "escape")
     os.symlink(outside, link)
+    # A non-hidden name inside www/ that resolves to a hidden file still in www/.
+    hidden_link = os.path.join(www, "shortcut")
+    os.symlink(secret, hidden_link)
+    hidden_dir = os.path.join(www, ".hidden")
+    os.makedirs(hidden_dir)
+    open(os.path.join(hidden_dir, "file.html"), "w").write("HIDDENDIR")
+    dir_link = os.path.join(www, "sneaky")
+    os.symlink(os.path.join(hidden_dir, "file.html"), dir_link)
 
     ok("home is served", os.path.basename(g.safe_www_file(www, "/")) == "index.html")
     ok("stats is served", g.safe_www_file(www, "/stats/").endswith(os.path.join("stats", "index.html")))
@@ -45,6 +53,8 @@ def main():
     ok("parent path refused", g.safe_www_file(www, "/../outside.txt") is None)
     ok("encoded parent path refused", g.safe_www_file(www, "/%2e%2e/outside.txt") is None)
     ok("symlink out of www refused", g.safe_www_file(www, "/escape") is None)
+    ok("symlink inside www to a hidden file refused", g.safe_www_file(www, "/shortcut") is None)
+    ok("symlink inside www to a hidden-dir file refused", g.safe_www_file(www, "/sneaky") is None)
     ok("missing file refused", g.safe_www_file(www, "/no-such-file") is None)
 
     g.WWW = www
@@ -71,6 +81,10 @@ def main():
     ok("http dotfile 404, not the hidden bytes", code == 404 and body == b"not found")
     code, body = get("/escape")
     ok("http symlink 404, not the outside bytes", code == 404 and body == b"not found")
+    code, body = get("/shortcut")
+    ok("http hidden-file symlink 404, not the hidden bytes", code == 404 and body == b"not found")
+    code, body = get("/sneaky")
+    ok("http hidden-dir symlink 404, not the hidden bytes", code == 404 and body == b"not found")
 
     # JSON-RPC path still answers (upstream will fail; we only check the method is accepted
     # and a well-formed error comes back, not a GET-style 404).

@@ -102,8 +102,10 @@ def check(req, ip):
 
 def safe_www_file(www, url_path):
     """Return the real file under www to serve, or None if the request is refused.
-    Refuses any path segment starting with '.', and anything whose resolved
-    location is outside www/ (including symlinks)."""
+    Refuses any request path segment starting with '.', anything whose resolved
+    location is outside www/ (including symlinks out), and any resolved path
+    under www/ that has a hidden (dot-prefixed) segment — e.g. a shortcut
+    inside www/ that points at a hidden file."""
     path = unquote((url_path or "").split("?")[0])
     if path in ("/", ""):
         path = "/index.html"
@@ -118,6 +120,11 @@ def safe_www_file(www, url_path):
     try:
         f = os.path.realpath(os.path.join(root, rel))
         if os.path.commonpath([root, f]) != root:
+            return None
+        # Also refuse a symlink (or any path) whose resolved location under www/
+        # has a hidden segment, e.g. www/shortcut -> www/.secret
+        rel_real = os.path.relpath(f, root)
+        if rel_real.startswith(os.pardir) or any(p.startswith(".") for p in rel_real.split(os.sep)):
             return None
     except (ValueError, OSError):
         return None

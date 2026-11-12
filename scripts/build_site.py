@@ -16,6 +16,7 @@ import base64
 import os
 import re
 import shutil
+import subprocess
 
 import markdown
 from PIL import Image
@@ -316,8 +317,11 @@ def images():
 # ---- public-site publish guard ----
 # Never copy the real stats/sumo_config.js (it may hold the private server address).
 # Publish only the example (YOUR_SERVER placeholder) or a devnet-only setting.
+# Only tracked files are copied (never gitignored working-tree copies).
 EXAMPLE_STATS = os.path.join(ROOT, "stats", "sumo_config.example.js")
 LIVE_STATS = os.path.join(ROOT, "stats", "sumo_config.js")
+LIVE_STATS_DIR = os.path.join(ROOT, "stats")
+LIVE_DOCS_DIR = os.path.join(ROOT, "docs")
 IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 DEVNET_HOST = "api.devnet.solana.com"
 # Web files copied into a publish folder. Source markdown, fonts and screens stay out.
@@ -332,6 +336,36 @@ STATS_PUBLISH = (
     "sumo_frog.png", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png",
     "header_stats.jpg",
 )
+
+
+def is_same_or_inside(path, parent):
+    """True if path is parent, or a file/folder inside parent, after resolving symlinks."""
+    path = os.path.realpath(path)
+    parent = os.path.realpath(parent)
+    try:
+        return os.path.commonpath([path, parent]) == parent
+    except ValueError:
+        return False
+
+
+def refuse_live_publish_dest(dest, what="publish folder"):
+    """Refuse a destination that is, or is inside, the live stats/ or docs/ trees (or ROOT)."""
+    dest_real = os.path.realpath(os.path.abspath(dest))
+    root_real = os.path.realpath(ROOT)
+    if dest_real == root_real or is_same_or_inside(dest_real, LIVE_STATS_DIR) or is_same_or_inside(dest_real, LIVE_DOCS_DIR):
+        raise SystemExit(f"refusing to write a {what} into the live stats/ or docs/ tree")
+    return dest_real
+
+
+def require_tracked(relpath):
+    """Refuse to publish a path that is not a tracked git file (blocks ignored configs)."""
+    r = subprocess.run(
+        ["git", "-C", ROOT, "ls-files", "--error-unmatch", "--", relpath],
+        stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    if r.returncode != 0:
+        raise SystemExit(f"refusing to publish untracked file: {relpath}")
+    return os.path.join(ROOT, relpath)
 
 
 def stats_config_is_publishable(text):
@@ -354,7 +388,7 @@ def stats_config_is_publishable(text):
 
 def publishable_stats_config(kind="example"):
     """Build a stats config from the example file only — never from stats/sumo_config.js."""
-    text = open(EXAMPLE_STATS, encoding="utf-8").read()
+    text = open(require_tracked(os.path.join("stats", "sumo_config.example.js")), encoding="utf-8").read()
     if kind == "example":
         out = text
     elif kind == "devnet":
@@ -368,10 +402,8 @@ def publishable_stats_config(kind="example"):
 
 
 def write_publishable_stats_config(dest_dir, kind="example"):
+    refuse_live_publish_dest(dest_dir, "published config")
     dest_dir = os.path.abspath(dest_dir)
-    live_dir = os.path.abspath(os.path.join(ROOT, "stats"))
-    if dest_dir == live_dir:
-        raise SystemExit("refusing to write a published config into the live stats/ folder")
     dest = os.path.join(dest_dir, "sumo_config.js")
     if os.path.isfile(LIVE_STATS) and os.path.isfile(dest):
         try:
@@ -380,20 +412,25 @@ def write_publishable_stats_config(dest_dir, kind="example"):
         except OSError:
             pass
     os.makedirs(dest_dir, exist_ok=True)
+    # dest was already refused if it is inside the live stats/ tree, so this write
+    # cannot land on the real stats/sumo_config.js via a symlink.
     open(dest, "w", encoding="utf-8").write(publishable_stats_config(kind))
     return dest
 
 
 def stage_public_site(dest, kind="example"):
-    """Copy the website into dest, with only a publishable stats config (never the real one)."""
+    """Copy the website into dest, with only a publishable stats config (never the real one).
+
+    Only tracked files are copied from docs/ and stats/. The live (gitignored)
+    stats/sumo_config.js is never a source. dest must not be, or be inside,
+    the live stats/ or docs/ trees, including via a symlink.
+    """
+    refuse_live_publish_dest(dest, "public site")
     dest = os.path.abspath(dest)
-    if dest == ROOT or dest.startswith(os.path.join(ROOT, "stats")) or dest.startswith(os.path.join(ROOT, "docs")):
-        # Allow a folder *inside* /tmp etc.; only refuse writing over the live trees.
-        if dest == os.path.abspath(os.path.join(ROOT, "stats")) or dest == os.path.abspath(os.path.join(ROOT, "docs")) or dest == ROOT:
-            raise SystemExit("refusing to stage the public site over the live repo folders")
     os.makedirs(dest, exist_ok=True)
     for name in DOCS_PUBLISH:
-        src = os.path.join(ROOT, "docs", name)
+        rel = os.path.join("docs", name)
+        src = require_tracked(rel)
         if not os.path.isfile(src):
             raise SystemExit(f"missing docs/{name}; run this script without --publish-dir first")
         shutil.copy2(src, os.path.join(dest, name))
@@ -402,7 +439,8 @@ def stage_public_site(dest, kind="example"):
     for name in STATS_PUBLISH:
         if name == "sumo_config.js":
             raise SystemExit("internal error: real stats config must not be in the copy list")
-        src = os.path.join(ROOT, "stats", name)
+        rel = os.path.join("stats", name)
+        src = require_tracked(rel)
         if not os.path.isfile(src):
             raise SystemExit(f"missing stats/{name}")
         shutil.copy2(src, os.path.join(stats_dest, name))

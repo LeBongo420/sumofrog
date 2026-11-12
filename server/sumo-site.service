@@ -17,10 +17,11 @@ AmbientCapabilities=CAP_NET_BIND_SERVICE
 CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
-ProtectHome=read-only
+ProtectHome=tmpfs
 PrivateTmp=yes
-# ProtectHome would otherwise hide /home/ubuntu from this user.
-BindReadOnlyPaths=/home/ubuntu/sumo
+# ProtectHome=tmpfs hides /home. Bind only the public site folder and the
+# Caddyfile, so the rest of /home/ubuntu/sumo (keys, validator, gateway) stays hidden.
+BindReadOnlyPaths=/home/ubuntu/sumo/site /home/ubuntu/sumo/Caddyfile
 ReadWritePaths=/var/lib/caddy /var/log/caddy
 Environment=XDG_DATA_HOME=/var/lib/caddy
 Environment=XDG_CONFIG_HOME=/var/lib/caddy

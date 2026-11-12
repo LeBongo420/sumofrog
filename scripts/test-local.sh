@@ -61,6 +61,9 @@ python3 tests/miner_checks.py | grep -v '^Address:'
 echo "== gateway path checks (offline)"
 python3 tests/gateway_checks.py
 
+echo "== site publish and zip path checks (offline)"
+python3 tests/site_publish_checks.py
+
 echo "== deploy-devnet SUMO_RPC guard (offline)"
 python3 tests/deploy_devnet_guard.py
 
