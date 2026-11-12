@@ -3,6 +3,7 @@
 No network. Run: python3 tests/site_publish_checks.py
 """
 import os
+import subprocess
 import sys
 import tempfile
 
@@ -25,6 +26,24 @@ def refused(fn, *a, **kw):
     except SystemExit as e:
         return str(e.code)
     raise AssertionError(f"not refused: {fn.__name__}")
+
+
+def write_site(path, marker):
+    os.makedirs(path, exist_ok=True)
+    open(os.path.join(path, "marker.txt"), "w", encoding="utf-8").write(marker)
+
+
+def swap_public_site(base):
+    """Run the documented repeat-safe swap in a stand-in of /home/ubuntu/sumo."""
+    subprocess.run(["rm", "-rf", os.path.join(base, "site.old")], check=True)
+    subprocess.run(
+        ["mv", "-T", os.path.join(base, "site"), os.path.join(base, "site.old")],
+        check=True,
+    )
+    subprocess.run(
+        ["mv", "-T", os.path.join(base, "site.new"), os.path.join(base, "site")],
+        check=True,
+    )
 
 
 def main():
@@ -185,6 +204,44 @@ def main():
     except SystemExit:
         packed_stats = False
     ok("zip git_show refuses the ignored real stats config", not packed_stats)
+
+    readme = open(os.path.join(b.ROOT, "server", "README.md"), encoding="utf-8").read()
+    ok("README swap removes site.old first",
+       "rm -rf /home/ubuntu/sumo/site.old" in readme)
+    ok("README swap uses mv -T",
+       "mv -T /home/ubuntu/sumo/site /home/ubuntu/sumo/site.old" in readme
+       and "mv -T /home/ubuntu/sumo/site.new /home/ubuntu/sumo/site" in readme)
+
+    swap_root = os.path.join(tmp, "sumo")
+    os.makedirs(swap_root)
+    write_site(os.path.join(swap_root, "site"), "v1")
+    write_site(os.path.join(swap_root, "site.new"), "v2")
+    swap_public_site(swap_root)
+    ok("first swap puts the new site live",
+       open(os.path.join(swap_root, "site", "marker.txt"), encoding="utf-8").read() == "v2")
+    ok("first swap kept the previous site as site.old",
+       open(os.path.join(swap_root, "site.old", "marker.txt"), encoding="utf-8").read() == "v1")
+    ok("first swap did not nest folders",
+       not os.path.exists(os.path.join(swap_root, "site.old", "site"))
+       and not os.path.exists(os.path.join(swap_root, "site", "site")))
+
+    write_site(os.path.join(swap_root, "site.new"), "v3")
+    swap_public_site(swap_root)
+    ok("second swap puts the newer site live",
+       open(os.path.join(swap_root, "site", "marker.txt"), encoding="utf-8").read() == "v3")
+    ok("second swap replaced site.old rather than nesting",
+       open(os.path.join(swap_root, "site.old", "marker.txt"), encoding="utf-8").read() == "v2"
+       and not os.path.exists(os.path.join(swap_root, "site.old", "site"))
+       and not os.path.exists(os.path.join(swap_root, "site", "site")))
+
+    write_site(os.path.join(swap_root, "site.new"), "v4")
+    swap_public_site(swap_root)
+    ok("third swap still updates the live site",
+       open(os.path.join(swap_root, "site", "marker.txt"), encoding="utf-8").read() == "v4")
+    ok("third swap still does not nest folders",
+       open(os.path.join(swap_root, "site.old", "marker.txt"), encoding="utf-8").read() == "v3"
+       and not os.path.exists(os.path.join(swap_root, "site.old", "site"))
+       and not os.path.exists(os.path.join(swap_root, "site", "site")))
 
     print(f"site publish checks: {passed} passed")
 

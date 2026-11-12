@@ -126,7 +126,7 @@ The plan is the simplest free route: **Caddy** with automatic Let's Encrypt cert
 | What stays off 443 | The filtered JSON-RPC gateway, the validator, and every other service |
 | JSON-RPC | Remains on port 8080 (HTTP), as today |
 | Config templates | `Caddyfile.example`, `sumo-site.service` (YOUR_DOMAIN placeholder, no server address) |
-| Site files on the server | `/home/ubuntu/sumo/site`. Publish into a fresh empty folder (for example `/home/ubuntu/sumo/site.new`) with `python3 scripts/build_site.py --publish-dir ...` so only the example or devnet stats config is included, never the real `stats/sumo_config.js`, then swap: move the live `site` aside and move `site.new` into its place. The script refuses a non-empty folder, so a second publish cannot go straight into the live `site`. |
+| Site files on the server | `/home/ubuntu/sumo/site`. Publish into a fresh empty folder (for example `/home/ubuntu/sumo/site.new`) with `python3 scripts/build_site.py --publish-dir ...` so only the example or devnet stats config is included, never the real `stats/sumo_config.js`, then swap with `rm -rf /home/ubuntu/sumo/site.old` followed by `mv -T /home/ubuntu/sumo/site /home/ubuntu/sumo/site.old` and `mv -T /home/ubuntu/sumo/site.new /home/ubuntu/sumo/site`. The script refuses a non-empty folder, so a second publish cannot go straight into the live `site`. The `rm -rf` of `site.old` makes the swap safe to repeat. |
 | Caddy process | `sumo-site.service` runs as a dedicated `sumo-site` user with only `CAP_NET_BIND_SERVICE`, `ProtectHome=tmpfs`, and read-only binds for `/home/ubuntu/sumo/site` and the Caddyfile only (template only; not installed) |
 
 Caddy will refuse POST on 80/443, so the test-network RPC cannot be reached through the website.
@@ -149,8 +149,9 @@ by that user, publish the website into a fresh empty folder (for example
 `python3 scripts/build_site.py --publish-dir ...` (never the real
 `stats/sumo_config.js`; the script refuses a non-empty folder, including
 the live `site` after the first publish), then swap it into place
-(`mv /home/ubuntu/sumo/site /home/ubuntu/sumo/site.old` and
-`mv /home/ubuntu/sumo/site.new /home/ubuntu/sumo/site`), put a Caddyfile with the hostname in
+(`rm -rf /home/ubuntu/sumo/site.old`, then
+`mv -T /home/ubuntu/sumo/site /home/ubuntu/sumo/site.old &&
+mv -T /home/ubuntu/sumo/site.new /home/ubuntu/sumo/site`), put a Caddyfile with the hostname in
 `/home/ubuntu/sumo/Caddyfile`, allow 80 and 443 in iptables (saved to
 `/etc/iptables/rules.v4`, comments `sumo-site-http` and `sumo-site-https`),
 and start `sumo-site.service`. The unit binds ports 80 and 443 with only

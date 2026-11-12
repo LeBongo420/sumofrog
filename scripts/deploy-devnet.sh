@@ -10,6 +10,9 @@ RPC="${SUMO_RPC:-https://api.devnet.solana.com}"   # SUMO_RPC=http://127.0.0.1:8
 case "$RPC" in
   *\\*|*@*) echo "SUMO_RPC has a backslash or @, refusing."; exit 1 ;;
 esac
+# After the RPC refuse, before any network call: stop if the declared
+# program addresses disagree (public addresses only).
+python3 scripts/check_program_id.py >/dev/null
 DEVNET_GENESIS=EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG
 PRIVATE_GENESIS="${SUMO_PRIVATE_GENESIS:-9eDPpAG4RUei7HTciCEucnshXm6Rfo61d6KU8hyXwx6n}"  # private Sumo validator on the Oracle server
 GH="$(solana genesis-hash -u "$RPC")"

@@ -67,6 +67,12 @@ python3 tests/site_publish_checks.py
 echo "== deploy-devnet SUMO_RPC guard (offline)"
 python3 tests/deploy_devnet_guard.py
 
+echo "== program id checks (offline)"
+python3 tests/program_id_checks.py
+
+echo "== stray keypair cleanup checks (offline)"
+python3 tests/stray_keypair_checks.py
+
 echo "== rust unit tests"
 cargo test -p sumofrog --lib 2>&1 | tee -a "$LOG"
 
@@ -75,18 +81,16 @@ anchor build 2>&1 | grep -v "overflows the maximum allowed frame space" | tail -
 test -f target/deploy/sumofrog.so
 # anchor build writes a keypair only if one is missing. That auto-generated
 # key is not the program key (deploy scripts use .keys/program.json). Remove
-# it so a stray or wrong key is not left behind.
-if [ -f target/deploy/sumofrog-keypair.json ]; then
-  shred -u -n 3 target/deploy/sumofrog-keypair.json 2>/dev/null || rm -f target/deploy/sumofrog-keypair.json
-fi
+# it only when it is a plain stray file in this repo's target/deploy.
+bash scripts/remove_stray_keypair.sh "$PWD"
 
 echo "== integration tests (own validator on this machine's port $RPC_PORT)"
 mkdir -p .anchor  # a fresh clone has no .anchor/, and the validator can't start without it
 rm -rf "$LEDGER"
-# Public program address from Anchor.toml; no key file needed to load the .so.
-PID=$(awk -F '"' '/^sumofrog = / { print $2; exit }' Anchor.toml)
+# Agreed public program address (Anchor.toml, declare_id!, and the key if present).
+PID=$(python3 scripts/check_program_id.py)
 if [ -z "$PID" ]; then
-  echo "FAIL: program id not found in Anchor.toml"
+  echo "FAIL: program id check produced no address"
   exit 1
 fi
 solana-test-validator --reset --quiet --ledger "$LEDGER" --bind-address 127.0.0.1 \
