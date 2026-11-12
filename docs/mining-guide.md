@@ -19,7 +19,7 @@ Not sure if you have it? Skip this step. If Python is missing, the miner says "P
 
 ## 2. Download and unzip the miner
 
-1. Download the miner: **[sumo-miner-v0.6.zip](downloads/sumo-miner-v0.6.zip)**. Check the file: SHA-256 `3932dba23943602de6a5db0a24d4f21051aea600d2b690058526e70891c25cfd`.
+1. Download the miner: **[sumo-miner-v0.6.zip](downloads/sumo-miner-v0.6.zip)**. Check the file: SHA-256 `cb8cf807efa5ad91f09ee664ea57c6d805829eabb51de7938753ae98e11df536`.
 2. Right-click the zip and choose **Extract All…**, then click **Extract**.
 3. Open the new folder. Copy `sumo_config.example.json` to `sumo_config.json`, then open that file and replace `YOUR_SERVER` with the test gateway address you were given. The miner cannot connect until you do this. Leave `"network"` set to `"private"` unless you were told to switch it to `"devnet"`. You'll also see `START HERE.txt`, `Mine SUMO.bat`, `Check balance.bat`, `Get test SOL.bat`, `Set payout address.bat` and `Withdraw SOL.bat`.
 
