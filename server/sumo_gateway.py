@@ -8,6 +8,7 @@ Worthless test network. No keys live here. Stdlib only.
 """
 import json, os, sys, time, threading, urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import unquote
 
 UPSTREAM = os.environ.get("SUMO_UPSTREAM", "http://127.0.0.1:8899")
 PORT = int(os.environ.get("SUMO_GATEWAY_PORT", "8080"))
@@ -98,6 +99,33 @@ def check(req, ip):
     return None
 
 
+
+def safe_www_file(www, url_path):
+    """Return the real file under www to serve, or None if the request is refused.
+    Refuses any path segment starting with '.', and anything whose resolved
+    location is outside www/ (including symlinks)."""
+    path = unquote((url_path or "").split("?")[0])
+    if path in ("/", ""):
+        path = "/index.html"
+    if path.endswith("/"):
+        path = path + "index.html"
+    rel = path.lstrip("/")
+    parts = rel.split("/")
+    if (not rel or ".." in parts or "" in parts
+            or any(p.startswith(".") or ("\\" in p) or (chr(0) in p) for p in parts)):
+        return None
+    root = os.path.realpath(www)
+    try:
+        f = os.path.realpath(os.path.join(root, rel))
+        if os.path.commonpath([root, f]) != root:
+            return None
+    except (ValueError, OSError):
+        return None
+    if not os.path.isfile(f):
+        return None
+    return f
+
+
 class H(BaseHTTPRequestHandler):
     timeout = 15
     server_version = "sumo-gateway"
@@ -129,18 +157,8 @@ class H(BaseHTTPRequestHandler):
         ip = self.client_address[0]
         if not take(buckets, ip, RATE, BURST):
             return self.reply(429, b"slow down", "text/plain")
-        path = self.path.split("?")[0]
-        if path in ("/", ""):
-            path = "/index.html"
-        if path.endswith("/"):
-            path = path + "index.html"
-        rel = path.lstrip("/")
-        parts = rel.split("/")
-        if (not rel or ".." in parts or "" in parts or any(("\\" in p) or (chr(0) in p) for p in parts)):
-            return self.reply(404, b"not found", "text/plain")
-        root = os.path.abspath(WWW)
-        f = os.path.abspath(os.path.join(root, rel))
-        if os.path.commonpath([root, f]) != root or not os.path.isfile(f):
+        f = safe_www_file(WWW, self.path)
+        if not f:
             return self.reply(404, b"not found", "text/plain")
         with open(f, "rb") as fh:
             self.reply(200, fh.read(), TYPES.get(os.path.splitext(f)[1], "application/octet-stream"))

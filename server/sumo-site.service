@@ -4,17 +4,26 @@ After=network-online.target
 Wants=network-online.target
 
 [Service]
-User=root
+# Template only — not installed. Create the sumo-site user and
+# /var/lib/caddy /var/log/caddy before this is ever enabled.
+# Do not run as root.
+User=sumo-site
+Group=sumo-site
 ExecStart=/usr/bin/caddy run --config /home/ubuntu/sumo/Caddyfile --adapter caddyfile
 ExecReload=/usr/bin/caddy reload --config /home/ubuntu/sumo/Caddyfile --adapter caddyfile
 Restart=on-failure
 RestartSec=5
 AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=read-only
 PrivateTmp=yes
+# ProtectHome would otherwise hide /home/ubuntu from this user.
+BindReadOnlyPaths=/home/ubuntu/sumo
 ReadWritePaths=/var/lib/caddy /var/log/caddy
+Environment=XDG_DATA_HOME=/var/lib/caddy
+Environment=XDG_CONFIG_HOME=/var/lib/caddy
 
 [Install]
 WantedBy=multi-user.target

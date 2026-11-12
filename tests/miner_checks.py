@@ -2,6 +2,7 @@
 """Offline checks for the miner's address and network guards (Ribbit's 2 Nov 2026 review).
 No network, no keys: a fake RPC answers. Run: python3 tests/miner_checks.py"""
 import os
+import shutil
 import stat
 import sys
 import tempfile
@@ -12,7 +13,37 @@ import sumo_miner as m  # noqa: E402
 from solders.keypair import Keypair  # noqa: E402
 from solders.pubkey import Pubkey  # noqa: E402
 
-S = m.load_settings()
+
+def load_test_settings():
+    """Load miner settings, falling back to the example config in a temp folder
+    when sumo_config.json is missing (a fresh checkout). Honour SUMO_CONFIG if set."""
+    here = os.path.dirname(os.path.abspath(m.__file__))
+    override = os.environ.get("SUMO_CONFIG")
+    cfg = override if override else os.path.join(here, "sumo_config.json")
+    example = os.path.join(here, "sumo_config.example.json")
+    if os.path.isfile(cfg):
+        work = os.path.dirname(os.path.abspath(cfg))
+        name = os.path.basename(cfg)
+        if name != "sumo_config.json":
+            tmp = tempfile.mkdtemp()
+            shutil.copy(cfg, os.path.join(tmp, "sumo_config.json"))
+            work = tmp
+    else:
+        if override:
+            raise SystemExit(f"SUMO_CONFIG not found: {cfg}")
+        if not os.path.isfile(example):
+            raise SystemExit("miner checks need miner/sumo_config.example.json")
+        work = tempfile.mkdtemp()
+        shutil.copy(example, os.path.join(work, "sumo_config.json"))
+    old = m.HERE
+    m.HERE = work
+    try:
+        return m.load_settings()
+    finally:
+        m.HERE = old
+
+
+S = load_test_settings()
 PROGRAM = Pubkey.from_string(S["program_id"])
 CONFIG = Pubkey.find_program_address([b"config"], PROGRAM)[0]
 MINT = Pubkey.find_program_address([b"mint"], PROGRAM)[0]
@@ -176,5 +207,58 @@ mode = stat.S_IMODE(os.stat(key).st_mode)
 ok("new key is 600", os.name == "nt" or mode == 0o600)
 ok("new-key won't overwrite", "already exists" in refused(m.cmd_new_key, types.SimpleNamespace(keypair=key), S))
 os.remove(key)
+
+# ---- apply_network: refuse bad types; warn (do not stop) on a genesis mismatch ----
+base = {k: S[k] for k in ("program_id", "config", "mint", "rpc", "private_genesis", "devnet_rpc") if k in S}
+
+
+def net_settings(**kw):
+    t = dict(base)
+    t.update(kw)
+    return t
+
+
+ok("missing network defaults to private", m.apply_network(net_settings())["network"] == "private")
+ok("private kept", m.apply_network(net_settings(network="private"))["network"] == "private")
+dev = m.apply_network(net_settings(network="devnet"))
+ok("devnet selects devnet_rpc", dev["network"] == "devnet" and dev["rpc"] == base["devnet_rpc"])
+for bad in (False, 0, 1, [], {}, True):
+    msg = refused(m.apply_network, net_settings(network=bad)).lower()
+    ok(f"non-string network {bad!r} refused", "network" in msg and "private" in msg and "devnet" in msg)
+ok("empty network refused", "network" in refused(m.apply_network, net_settings(network="")).lower())
+ok("unknown network refused", "Unknown network" in refused(m.apply_network, net_settings(network="mainnet")))
+ok("non-string devnet_rpc refused", "devnet_rpc" in refused(m.apply_network, net_settings(devnet_rpc=443)).lower())
+ok("empty devnet_rpc refused", "devnet_rpc" in refused(m.apply_network, net_settings(devnet_rpc="")).lower())
+missing = net_settings(network="devnet")
+missing.pop("devnet_rpc")
+ok("missing devnet_rpc defaults to public devnet",
+   m.apply_network(missing)["rpc"] == "https://api.devnet.solana.com")
+
+
+def check_shown(genesis, url, settings):
+    out = io.StringIO()
+    with contextlib.redirect_stdout(out):
+        label = m.check_devnet(FakeRpc(genesis), url, settings)
+    return label, out.getvalue()
+
+
+priv = m.apply_network(net_settings(network="private"))
+label, shown = check_shown(S["private_genesis"], S["rpc"], priv)
+ok("private + matching genesis: no warning", label == "private Sumo test network" and "Warning" not in shown)
+label, shown = check_shown(m.DEVNET_GENESIS, "https://api.devnet.solana.com", priv)
+ok("private label on a devnet chain: warns, still runs",
+   label == "devnet" and "Warning" in shown and "devnet" in shown)
+# network=devnet but the chain is the private genesis (e.g. devnet_rpc pointed at the private gateway)
+s = dict(base, network="devnet", devnet_rpc="https://example-for-test.invalid")
+s = m.apply_network(s)
+# Use the shipped private http link with the private genesis so check_devnet accepts it,
+# after apply_network has labelled the settings as devnet.
+s["_shipped_rpc"] = S["rpc"]
+label, shown = check_shown(S["private_genesis"], S["rpc"], s)
+ok("devnet label on the private chain: warns, still runs",
+   label == "private Sumo test network" and "Warning" in shown and "private" in shown)
+label, shown = check_shown(LOCAL_GENESIS, "http://127.0.0.1:8899", priv)
+ok("private label on localhost: warns, still runs",
+   label == "local test validator" and "Warning" in shown)
 
 print(f"miner checks: {passed} passed")

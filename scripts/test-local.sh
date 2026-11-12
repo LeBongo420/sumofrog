@@ -50,7 +50,16 @@ if ! cmp -s tests/vectors/golden.json "$LOG.golden"; then
 fi
 
 echo "== miner checks (offline)"
+if [ ! -f miner/sumo_config.json ]; then
+  mkdir -p "$TMPDIR_RUN/miner-cfg"
+  cp miner/sumo_config.example.json "$TMPDIR_RUN/miner-cfg/sumo_config.json"
+  export SUMO_CONFIG="$TMPDIR_RUN/miner-cfg/sumo_config.json"
+  echo "note: no miner/sumo_config.json; using the example config in a temp folder"
+fi
 python3 tests/miner_checks.py | grep -v '^Address:'
+
+echo "== gateway path checks (offline)"
+python3 tests/gateway_checks.py
 
 echo "== deploy-devnet SUMO_RPC guard (offline)"
 python3 tests/deploy_devnet_guard.py

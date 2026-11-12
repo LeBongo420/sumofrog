@@ -288,18 +288,39 @@ def plain_banner(info):
 
 def apply_network(settings):
     """Pick the RPC from a single "network" setting. Default is the private test chain.
-    "devnet" uses devnet_rpc (public Solana devnet). Does not deploy anything."""
+    "devnet" uses devnet_rpc (public Solana devnet). Does not deploy anything.
+    Refuses a network or devnet_rpc value that is not text, or is empty."""
     settings["_shipped_rpc"] = settings.get("rpc")  # the private network link this zip shipped with
-    raw = str(settings.get("network") or "private").strip().lower().replace("_", "-")
+    if "network" not in settings:
+        raw = "private"
+    else:
+        net = settings["network"]
+        if not isinstance(net, str) or not net.strip():
+            sys.exit('The "network" setting in sumo_config.json must be the word "private" or "devnet". Stopping.')
+        raw = net.strip().lower().replace("_", "-")
+    if "devnet_rpc" in settings:
+        devnet_rpc = settings["devnet_rpc"]
+        if not isinstance(devnet_rpc, str) or not devnet_rpc.strip():
+            sys.exit('The "devnet_rpc" setting in sumo_config.json must be a web address '
+                     '(for example https://api.devnet.solana.com). Stopping.')
     if raw in ("devnet", "public-devnet"):
         rpc = settings.get("devnet_rpc") or "https://api.devnet.solana.com"
         settings["rpc"] = rpc
         settings["network"] = "devnet"
-    elif raw in ("private", "private-test", ""):
+    elif raw in ("private", "private-test"):
         settings["network"] = "private"
     else:
         sys.exit('Unknown network in sumo_config.json. Use "private" or "devnet". Stopping.')
     return settings
+
+
+def warn_network_mismatch(settings, cluster):
+    """Warn (do not stop) when the chain we found does not match the chosen network."""
+    wanted = settings.get("network") or "private"
+    if wanted == "devnet" and cluster != "devnet":
+        print(f'Warning: network is set to "devnet" in sumo_config.json, but this chain is {cluster}.', flush=True)
+    elif wanted == "private" and cluster != "private Sumo test network":
+        print(f'Warning: network is set to "private" in sumo_config.json, but this chain is {cluster}.', flush=True)
 
 
 def load_settings():
@@ -387,13 +408,19 @@ def check_devnet(rpc, url, settings):
     if genesis == MAINNET_GENESIS:
         sys.exit("This RPC is Solana MAINNET. Sumo Frog never runs there. Stopping.")
     if settings.get("private_genesis") and genesis == settings["private_genesis"]:
-        return "private Sumo test network"
+        cluster = "private Sumo test network"
+        warn_network_mismatch(settings, cluster)
+        return cluster
     if scheme == "http" and not local:
         sys.exit("That network link isn't encrypted (http) and isn't the private Sumo test network. Stopping.")
     if genesis == DEVNET_GENESIS:
-        return "devnet"
+        cluster = "devnet"
+        warn_network_mismatch(settings, cluster)
+        return cluster
     if local:
-        return "local test validator"
+        cluster = "local test validator"
+        warn_network_mismatch(settings, cluster)
+        return cluster
     sys.exit("This RPC is not Solana devnet or the private Sumo Frog test network. Stopping.")
 
 

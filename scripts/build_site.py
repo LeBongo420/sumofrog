@@ -11,8 +11,10 @@
 Fonts (Press Start 2P, DotGothic16, SIL OFL) are embedded in each page, so every page is one
 self-contained file plus its images. Usage: python3 scripts/build_site.py  (needs `markdown`, Pillow)
 """
+import argparse
 import base64
 import os
+import re
 import shutil
 
 import markdown
@@ -310,9 +312,130 @@ def images():
     print("wrote header, logo and metadata images")
 
 
-if __name__ == "__main__":
+
+# ---- public-site publish guard ----
+# Never copy the real stats/sumo_config.js (it may hold the private server address).
+# Publish only the example (YOUR_SERVER placeholder) or a devnet-only setting.
+EXAMPLE_STATS = os.path.join(ROOT, "stats", "sumo_config.example.js")
+LIVE_STATS = os.path.join(ROOT, "stats", "sumo_config.js")
+IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
+DEVNET_HOST = "api.devnet.solana.com"
+# Web files copied into a publish folder. Source markdown, fonts and screens stay out.
+DOCS_PUBLISH = (
+    "index.html", "mining-guide.html", "whitepaper.html",
+    "sumo_header.png", "sumo_logo.png", "sumo_frog_icon.png",
+    "favicon-16.png", "favicon-32.png", "apple-touch-icon.png",
+    "header_guide.jpg", "header_whitepaper.jpg",
+)
+STATS_PUBLISH = (
+    "index.html", "stats.js", "sumo_header.png", "sumo_logo.png", "sumo_frog_icon.png",
+    "sumo_frog.png", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png",
+    "header_stats.jpg",
+)
+
+
+def stats_config_is_publishable(text):
+    """True only for the YOUR_SERVER example or a config that talks to public devnet alone."""
+    if IPV4.search(text):
+        return False
+    urls = [u.rstrip('",;') for u in re.findall(r'https?://\S+', text)]
+    if not urls:
+        return False
+
+    def ok_url(u):
+        return "YOUR_SERVER" in u or DEVNET_HOST in u
+
+    if not all(ok_url(u) for u in urls):
+        return False
+    if "YOUR_SERVER" in text:
+        return True
+    return all(DEVNET_HOST in u for u in urls)
+
+
+def publishable_stats_config(kind="example"):
+    """Build a stats config from the example file only — never from stats/sumo_config.js."""
+    text = open(EXAMPLE_STATS, encoding="utf-8").read()
+    if kind == "example":
+        out = text
+    elif kind == "devnet":
+        out = text.replace('"network": "private"', '"network": "devnet"', 1)
+        out = out.replace('"rpc": "http://YOUR_SERVER:8080"', f'"rpc": "https://{DEVNET_HOST}"', 1)
+    else:
+        raise SystemExit('stats network must be "example" or "devnet"')
+    if not stats_config_is_publishable(out):
+        raise SystemExit("refusing to publish a stats config that is not the example or a devnet setting")
+    return out
+
+
+def write_publishable_stats_config(dest_dir, kind="example"):
+    dest_dir = os.path.abspath(dest_dir)
+    live_dir = os.path.abspath(os.path.join(ROOT, "stats"))
+    if dest_dir == live_dir:
+        raise SystemExit("refusing to write a published config into the live stats/ folder")
+    dest = os.path.join(dest_dir, "sumo_config.js")
+    if os.path.isfile(LIVE_STATS) and os.path.isfile(dest):
+        try:
+            if os.path.samefile(dest, LIVE_STATS):
+                raise SystemExit("refusing to overwrite the real stats/sumo_config.js")
+        except OSError:
+            pass
+    os.makedirs(dest_dir, exist_ok=True)
+    open(dest, "w", encoding="utf-8").write(publishable_stats_config(kind))
+    return dest
+
+
+def stage_public_site(dest, kind="example"):
+    """Copy the website into dest, with only a publishable stats config (never the real one)."""
+    dest = os.path.abspath(dest)
+    if dest == ROOT or dest.startswith(os.path.join(ROOT, "stats")) or dest.startswith(os.path.join(ROOT, "docs")):
+        # Allow a folder *inside* /tmp etc.; only refuse writing over the live trees.
+        if dest == os.path.abspath(os.path.join(ROOT, "stats")) or dest == os.path.abspath(os.path.join(ROOT, "docs")) or dest == ROOT:
+            raise SystemExit("refusing to stage the public site over the live repo folders")
+    os.makedirs(dest, exist_ok=True)
+    for name in DOCS_PUBLISH:
+        src = os.path.join(ROOT, "docs", name)
+        if not os.path.isfile(src):
+            raise SystemExit(f"missing docs/{name}; run this script without --publish-dir first")
+        shutil.copy2(src, os.path.join(dest, name))
+    stats_dest = os.path.join(dest, "stats")
+    os.makedirs(stats_dest, exist_ok=True)
+    for name in STATS_PUBLISH:
+        if name == "sumo_config.js":
+            raise SystemExit("internal error: real stats config must not be in the copy list")
+        src = os.path.join(ROOT, "stats", name)
+        if not os.path.isfile(src):
+            raise SystemExit(f"missing stats/{name}")
+        shutil.copy2(src, os.path.join(stats_dest, name))
+    # Explicitly skip LIVE_STATS and the example filename (the published file is always sumo_config.js).
+    write_publishable_stats_config(stats_dest, kind)
+    published = open(os.path.join(stats_dest, "sumo_config.js"), encoding="utf-8").read()
+    if not stats_config_is_publishable(published):
+        os.remove(os.path.join(stats_dest, "sumo_config.js"))
+        raise SystemExit("publish guard failed: staged stats config is not publishable")
+    if os.path.isfile(LIVE_STATS):
+        try:
+            if os.path.samefile(os.path.join(stats_dest, "sumo_config.js"), LIVE_STATS):
+                raise SystemExit("publish guard failed: staged config is the live file")
+        except OSError:
+            pass
+    print("staged public site in", dest, f"(stats config: {kind})")
+    return dest
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description="Build the Sumo Frog website, or stage a public copy")
+    ap.add_argument("--publish-dir", help="copy the built site here with only the example or devnet stats config")
+    ap.add_argument("--stats-network", choices=("example", "devnet"), default="example",
+                    help="which stats config to put in --publish-dir (default: example with YOUR_SERVER)")
+    args = ap.parse_args(argv)
+    if args.publish_dir:
+        return stage_public_site(args.publish_dir, args.stats_network)
     images()
     home_page()
     md_page("whitepaper.md", "whitepaper.html", "SUMO FROG ($SUMO) whitepaper (draft)", header=PAPER_HEADER)
     md_page("mining-guide.md", "mining-guide.html", "How to mine SUMO FROG ($SUMO)", header=GUIDE_HEADER)
     stats_page()
+
+
+if __name__ == "__main__":
+    main()

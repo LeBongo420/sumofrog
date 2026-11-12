@@ -91,6 +91,14 @@ Program upgrades: `solana program deploy -u http://127.0.0.1:18899 --use-rpc --k
 Gateway/page changes: copy files with `/workspace/oracle/put.py` into `/home/ubuntu/sumo/gateway/`
 (`www/` for the page), then `sudo systemctl restart sumo-gateway`.
 
+When assembling `www/` or the public HTTPS site, never copy the real
+`stats/sumo_config.js` (it may hold the private server address). Stage a
+publishable copy with `python3 scripts/build_site.py --publish-dir DIR`
+(example config, `YOUR_SERVER` placeholder) or
+`python3 scripts/build_site.py --publish-dir DIR --stats-network devnet`
+(official Solana devnet RPC only). The script refuses to publish any other
+stats config.
+
 ## Turning it off / removing
 
 ```bash
@@ -115,7 +123,8 @@ The plan is the simplest free route: **Caddy** with automatic Let's Encrypt cert
 | What stays off 443 | The filtered JSON-RPC gateway, the validator, and every other service |
 | JSON-RPC | Remains on port 8080 (HTTP), as today |
 | Config templates | `Caddyfile.example`, `sumo-site.service` (YOUR_DOMAIN placeholder, no server address) |
-| Site files on the server | `/home/ubuntu/sumo/site` (assembled from `docs/` + `stats/`) |
+| Site files on the server | `/home/ubuntu/sumo/site`, built with `python3 scripts/build_site.py --publish-dir ...` so only the example or devnet stats config is included, never the real `stats/sumo_config.js` |
+| Caddy process | `sumo-site.service` runs as a dedicated `sumo-site` user with only `CAP_NET_BIND_SERVICE` (template only; not installed) |
 
 Caddy will refuse POST on 80/443, so the test-network RPC cannot be reached through the website.
 
@@ -130,10 +139,17 @@ Caddy will refuse POST on 80/443, so the test-network RPC cannot be reached thro
    - TCP, source `0.0.0.0/0` (or Josh's home IP `/32`), destination port **443**
    Without these, the cloud firewall drops 80 and 443 even if iptables on the machine allows them.
 
-Once both are ready, the remaining work is: install Caddy, copy the website into
-`/home/ubuntu/sumo/site`, put a Caddyfile with the hostname in `/home/ubuntu/sumo/Caddyfile`,
-allow 80 and 443 in iptables (saved to `/etc/iptables/rules.v4`, comments `sumo-site-http` and
-`sumo-site-https`), and start `sumo-site.service`. No tunnel is used. The validator stays bound
-as it is today; iptables continues to reject its ports.
+Once both are ready, the remaining work is: install Caddy, create a system
+user `sumo-site` with home `/var/lib/caddy` (and `/var/log/caddy`), both owned
+by that user, stage the website into `/home/ubuntu/sumo/site` with
+`python3 scripts/build_site.py --publish-dir ...` (never the real
+`stats/sumo_config.js`), put a Caddyfile with the hostname in
+`/home/ubuntu/sumo/Caddyfile`, allow 80 and 443 in iptables (saved to
+`/etc/iptables/rules.v4`, comments `sumo-site-http` and `sumo-site-https`),
+and start `sumo-site.service`. The unit binds ports 80 and 443 with only
+`CAP_NET_BIND_SERVICE` and must not run as root. No tunnel is used. The
+validator stays bound as it is today; iptables continues to reject its ports.
 
 Do not announce the site or turn on GitHub Pages as part of this step.
+Do not install Caddy or open ports 80/443 until Josh has picked a hostname
+and added the two Oracle rules.
