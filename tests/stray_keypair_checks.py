@@ -121,6 +121,69 @@ def main():
            r.returncode == 0 and "warning" not in (r.stderr or "").lower())
         ok("missing file: the real key survives",
            os.path.isfile(real) and sha(real) == real_sha)
+
+        # No repo-root argument: refuse and do not touch a same-named file
+        # in the current folder.
+        decoy = os.path.join(tmp, "decoy")
+        os.makedirs(os.path.join(decoy, "target", "deploy"))
+        decoy_key = make_key(os.path.join(decoy, "target", "deploy", "sumofrog-keypair.json"))
+        decoy_sha = sha(decoy_key)
+        r = subprocess.run(
+            ["bash", SCRIPT],
+            cwd=decoy,
+            capture_output=True,
+            text=True,
+        )
+        err = (r.stderr or "").lower()
+        ok("missing argument: exit non-zero", r.returncode != 0)
+        ok("missing argument: message says the root is required",
+           "required" in err or "usage" in err)
+        ok("missing argument: did not delete the decoy file",
+           os.path.isfile(decoy_key) and sha(decoy_key) == decoy_sha)
+
+        # No .keys/program.json: leave the stray (this is the clean-checkout case).
+        nokeys = os.path.join(tmp, "nokeys")
+        os.makedirs(os.path.join(nokeys, "target", "deploy"))
+        leftover = make_key(os.path.join(nokeys, "target", "deploy", "sumofrog-keypair.json"))
+        leftover_sha = sha(leftover)
+        r = run_remove(nokeys)
+        ok("missing .keys/program.json: exit 0 and warned",
+           r.returncode == 0 and "program.json" in (r.stderr or "").lower())
+        ok("missing .keys/program.json: left the stray",
+           os.path.isfile(leftover) and sha(leftover) == leftover_sha)
+
+        # .keys/program.json is a symlink: leave the stray and the real key.
+        root, real, real_sha = setup_repo(tmp, "key-symlink")
+        outside = make_key(os.path.join(tmp, "key-symlink-outside.json"))
+        os.remove(real)
+        os.symlink(outside, real)
+        stray = make_key(os.path.join(root, "target", "deploy", "sumofrog-keypair.json"))
+        stray_sha = sha(stray)
+        outside_sha = sha(outside)
+        r = run_remove(root)
+        ok("symlinked .keys/program.json: exit 0 and warned",
+           r.returncode == 0 and "symlink" in (r.stderr or "").lower())
+        ok("symlinked .keys/program.json: left the stray",
+           os.path.isfile(stray) and sha(stray) == stray_sha)
+        ok("symlinked .keys/program.json: the real key survives",
+           os.path.isfile(outside) and sha(outside) == outside_sha
+           and os.path.islink(real))
+
+        # A separate byte-identical copy of the live key is a duplicate, so
+        # removing it is safe. The live key is left alone.
+        root, real, real_sha = setup_repo(tmp, "duplicate")
+        dup = os.path.join(root, "target", "deploy", "sumofrog-keypair.json")
+        shutil.copy2(real, dup)
+        os.chmod(dup, 0o600)
+        ok("duplicate: two separate files with the same hash",
+           os.stat(dup).st_ino != os.stat(real).st_ino
+           and sha(dup) == real_sha
+           and os.stat(dup).st_nlink == 1)
+        r = run_remove(root)
+        ok("duplicate: exit 0 and the copy was removed",
+           r.returncode == 0 and not os.path.lexists(dup))
+        ok("duplicate: the live key survives",
+           os.path.isfile(real) and sha(real) == real_sha)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

@@ -1,23 +1,33 @@
 #!/usr/bin/env bash
 # Remove target/deploy/sumofrog-keypair.json only when it is a plain stray
 # file: not a symlink, link count 1, realpath inside this repo's real
-# target/deploy, and neither target/ nor target/deploy is a symlink.
+# target/deploy, neither target/ nor target/deploy is a symlink, and
+# <root>/.keys/program.json exists as a regular file (not a symlink).
+# A byte-identical stray is still removed: that is a second copy of the
+# live key, and removing the copy is the safe outcome.
 # Otherwise warn and leave it. Uses plain rm, never shred.
-# Usage: scripts/remove_stray_keypair.sh [REPO_ROOT]
+# Usage: scripts/remove_stray_keypair.sh REPO_ROOT
 set -euo pipefail
 
-ROOT="${1:-.}"
+if [ "$#" -lt 1 ] || [ -z "${1:-}" ]; then
+  echo "error: repo root argument is required" >&2
+  echo "usage: scripts/remove_stray_keypair.sh REPO_ROOT" >&2
+  exit 1
+fi
+
+ROOT="$1"
 if [ ! -d "$ROOT" ]; then
   echo "warning: leaving target/deploy/sumofrog-keypair.json in place (repo root is not a directory)" >&2
   exit 0
 fi
-ROOT="$(cd "$ROOT" && pwd)"
+ROOT="$(cd -- "$ROOT" && pwd)"
 REPO_REAL="$(realpath "$ROOT")"
 
 REL="target/deploy/sumofrog-keypair.json"
 TARGET="$ROOT/target"
 DEPLOY="$ROOT/target/deploy"
 KEY="$DEPLOY/sumofrog-keypair.json"
+PROGRAM="$ROOT/.keys/program.json"
 
 if [ ! -e "$KEY" ] && [ ! -L "$KEY" ]; then
   exit 0
@@ -67,5 +77,17 @@ case "$KEY_REAL" in
     exit 0
     ;;
 esac
+
+# Only delete a stray when a live program key already exists as a plain
+# file, so this cannot be the only copy. A matching sha256 is a duplicate
+# of that live key and is safe to remove; we do not refuse it.
+if [ -L "$PROGRAM" ]; then
+  warn ".keys/program.json is a symlink"
+  exit 0
+fi
+if [ ! -f "$PROGRAM" ]; then
+  warn ".keys/program.json is missing or not a regular file"
+  exit 0
+fi
 
 rm -- "$KEY"
