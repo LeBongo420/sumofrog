@@ -184,6 +184,57 @@ def main():
            r.returncode == 0 and not os.path.lexists(dup))
         ok("duplicate: the live key survives",
            os.path.isfile(real) and sha(real) == real_sha)
+
+        # Empty .keys/program.json: leave the stray.
+        root, real, real_sha = setup_repo(tmp, "empty-key")
+        open(real, "w", encoding="utf-8").close()
+        stray = make_key(os.path.join(root, "target", "deploy", "sumofrog-keypair.json"))
+        stray_sha = sha(stray)
+        r = run_remove(root)
+        ok("empty program.json: exit 0 and warned",
+           r.returncode == 0 and "empty" in (r.stderr or "").lower())
+        ok("empty program.json: left the stray",
+           os.path.isfile(stray) and sha(stray) == stray_sha)
+
+        # Malformed .keys/program.json: leave the stray.
+        root, real, _real_sha = setup_repo(tmp, "bad-json")
+        open(real, "w", encoding="utf-8").write("not-a-keypair\n")
+        os.chmod(real, 0o600)
+        stray = make_key(os.path.join(root, "target", "deploy", "sumofrog-keypair.json"))
+        stray_sha = sha(stray)
+        r = run_remove(root)
+        ok("malformed program.json: exit 0 and warned",
+           r.returncode == 0 and "valid" in (r.stderr or "").lower())
+        ok("malformed program.json: left the stray",
+           os.path.isfile(stray) and sha(stray) == stray_sha)
+
+        # Wrong-length array in .keys/program.json: leave the stray.
+        root, real, _real_sha = setup_repo(tmp, "short-key")
+        open(real, "w", encoding="utf-8").write("[" + ",".join(["0"] * 32) + "]\n")
+        os.chmod(real, 0o600)
+        stray = make_key(os.path.join(root, "target", "deploy", "sumofrog-keypair.json"))
+        stray_sha = sha(stray)
+        r = run_remove(root)
+        ok("wrong-length program.json: exit 0 and warned",
+           r.returncode == 0 and "valid" in (r.stderr or "").lower())
+        ok("wrong-length program.json: left the stray",
+           os.path.isfile(stray) and sha(stray) == stray_sha)
+
+        # .keys/ itself is a symlink: leave the stray and the real key.
+        root, real, real_sha = setup_repo(tmp, "keys-dir-symlink")
+        outside_keys = os.path.join(tmp, "keys-dir-symlink-real")
+        os.rename(os.path.join(root, ".keys"), outside_keys)
+        os.symlink(outside_keys, os.path.join(root, ".keys"))
+        stray = make_key(os.path.join(root, "target", "deploy", "sumofrog-keypair.json"))
+        stray_sha = sha(stray)
+        r = run_remove(root)
+        ok("symlinked .keys/: exit 0 and warned",
+           r.returncode == 0 and ".keys is a symlink" in (r.stderr or "").lower())
+        ok("symlinked .keys/: left the stray",
+           os.path.isfile(stray) and sha(stray) == stray_sha)
+        ok("symlinked .keys/: the real key survives",
+           os.path.isfile(os.path.join(outside_keys, "program.json"))
+           and sha(os.path.join(outside_keys, "program.json")) == real_sha)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

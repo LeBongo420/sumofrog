@@ -2,9 +2,10 @@
 # Remove target/deploy/sumofrog-keypair.json only when it is a plain stray
 # file: not a symlink, link count 1, realpath inside this repo's real
 # target/deploy, neither target/ nor target/deploy is a symlink, and
-# <root>/.keys/program.json exists as a regular file (not a symlink).
-# A byte-identical stray is still removed: that is a second copy of the
-# live key, and removing the copy is the safe outcome.
+# <root>/.keys is not a symlink, and <root>/.keys/program.json exists as a
+# non-empty regular file (not a symlink) that parses as a JSON array of
+# 64 integers 0-255. A byte-identical stray is still removed: that is a
+# second copy of the live key, and removing the copy is the safe outcome.
 # Otherwise warn and leave it. Uses plain rm, never shred.
 # Usage: scripts/remove_stray_keypair.sh REPO_ROOT
 set -euo pipefail
@@ -78,15 +79,43 @@ case "$KEY_REAL" in
     ;;
 esac
 
-# Only delete a stray when a live program key already exists as a plain
-# file, so this cannot be the only copy. A matching sha256 is a duplicate
-# of that live key and is safe to remove; we do not refuse it.
+# Only delete a stray when a live program key already exists as a plain,
+# valid key file, so this cannot be the only copy. A matching sha256 is a
+# duplicate of that live key and is safe to remove; we do not refuse it.
+KEYS="$ROOT/.keys"
+if [ -L "$KEYS" ]; then
+  warn ".keys is a symlink"
+  exit 0
+fi
 if [ -L "$PROGRAM" ]; then
   warn ".keys/program.json is a symlink"
   exit 0
 fi
 if [ ! -f "$PROGRAM" ]; then
   warn ".keys/program.json is missing or not a regular file"
+  exit 0
+fi
+if [ ! -s "$PROGRAM" ]; then
+  warn ".keys/program.json is empty"
+  exit 0
+fi
+# Parse only; never print the file contents or any exception text.
+if ! python3 -c '
+import json, sys
+path = sys.argv[1]
+try:
+    with open(path, encoding="utf-8") as fh:
+        data = json.load(fh)
+    ok = (
+        isinstance(data, list)
+        and len(data) == 64
+        and all(isinstance(n, int) and not isinstance(n, bool) and 0 <= n <= 255 for n in data)
+    )
+except Exception:
+    ok = False
+sys.exit(0 if ok else 1)
+' "$PROGRAM"; then
+  warn ".keys/program.json is not a valid keypair"
   exit 0
 fi
 
