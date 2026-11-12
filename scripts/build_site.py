@@ -17,6 +17,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 
 import markdown
 from PIL import Image
@@ -357,6 +358,71 @@ def refuse_live_publish_dest(dest, what="publish folder"):
     return dest_real
 
 
+def refuse_occupied_or_linked(dest):
+    """Refuse a publish folder that is a symlink, is not a folder, is non-empty, or contains a symlink."""
+    dest = os.path.abspath(dest)
+    if os.path.lexists(dest):
+        if os.path.islink(dest):
+            raise SystemExit("refusing to write a public site into a symlink")
+        if not os.path.isdir(dest):
+            raise SystemExit("refusing to write a public site: destination is not a folder")
+        for dirpath, dirnames, filenames in os.walk(dest, followlinks=False):
+            for name in dirnames + filenames:
+                if os.path.islink(os.path.join(dirpath, name)):
+                    raise SystemExit("refusing to write a public site into a folder that contains a symlink")
+            if dirnames or filenames:
+                raise SystemExit("refusing to write a public site into a non-empty folder")
+    return dest
+
+
+def write_file_atomic(dest, data):
+    """Write text or bytes to dest via a temp file and os.replace (replaces a dest symlink, does not follow it)."""
+    dest = os.path.abspath(dest)
+    parent = os.path.dirname(dest)
+    os.makedirs(parent, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-publish-", dir=parent)
+    try:
+        if isinstance(data, str):
+            with os.fdopen(fd, "w", encoding="utf-8") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+        else:
+            with os.fdopen(fd, "wb") as fh:
+                fh.write(data)
+                fh.flush()
+                os.fsync(fh.fileno())
+        os.replace(tmp, dest)
+        tmp = None
+    finally:
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return dest
+
+
+def copy_file_atomic(src, dest):
+    """Copy a file to dest via a temp file and os.replace (replaces a dest symlink, does not follow it)."""
+    dest = os.path.abspath(dest)
+    parent = os.path.dirname(dest)
+    os.makedirs(parent, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=".tmp-publish-", dir=parent)
+    os.close(fd)
+    try:
+        shutil.copy2(src, tmp)
+        os.replace(tmp, dest)
+        tmp = None
+    finally:
+        if tmp is not None:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+    return dest
+
+
 def require_tracked(relpath):
     """Refuse to publish a path that is not a tracked git file (blocks ignored configs)."""
     r = subprocess.run(
@@ -412,9 +478,9 @@ def write_publishable_stats_config(dest_dir, kind="example"):
         except OSError:
             pass
     os.makedirs(dest_dir, exist_ok=True)
-    # dest was already refused if it is inside the live stats/ tree, so this write
-    # cannot land on the real stats/sumo_config.js via a symlink.
-    open(dest, "w", encoding="utf-8").write(publishable_stats_config(kind))
+    # dest was already refused if it is inside the live stats/ tree. Write via
+    # a temp file and os.replace so a planted symlink is replaced, not followed.
+    write_file_atomic(dest, publishable_stats_config(kind))
     return dest
 
 
@@ -423,18 +489,25 @@ def stage_public_site(dest, kind="example"):
 
     Only tracked files are copied from docs/ and stats/. The live (gitignored)
     stats/sumo_config.js is never a source. dest must not be, or be inside,
-    the live stats/ or docs/ trees, including via a symlink.
+    the live stats/ or docs/ trees, including via a symlink. dest must also
+    be an empty real folder (no existing files and no symlinks). Files are
+    written via a temp file and os.replace.
     """
     refuse_live_publish_dest(dest, "public site")
     dest = os.path.abspath(dest)
+    refuse_occupied_or_linked(dest)
     os.makedirs(dest, exist_ok=True)
+    if os.path.islink(dest):
+        raise SystemExit("refusing to write a public site into a symlink")
     for name in DOCS_PUBLISH:
         rel = os.path.join("docs", name)
         src = require_tracked(rel)
         if not os.path.isfile(src):
             raise SystemExit(f"missing docs/{name}; run this script without --publish-dir first")
-        shutil.copy2(src, os.path.join(dest, name))
+        copy_file_atomic(src, os.path.join(dest, name))
     stats_dest = os.path.join(dest, "stats")
+    if os.path.lexists(stats_dest):
+        raise SystemExit("refusing to write a public site into a non-empty folder")
     os.makedirs(stats_dest, exist_ok=True)
     for name in STATS_PUBLISH:
         if name == "sumo_config.js":
@@ -443,7 +516,7 @@ def stage_public_site(dest, kind="example"):
         src = require_tracked(rel)
         if not os.path.isfile(src):
             raise SystemExit(f"missing stats/{name}")
-        shutil.copy2(src, os.path.join(stats_dest, name))
+        copy_file_atomic(src, os.path.join(stats_dest, name))
     # Explicitly skip LIVE_STATS and the example filename (the published file is always sumo_config.js).
     write_publishable_stats_config(stats_dest, kind)
     published = open(os.path.join(stats_dest, "sumo_config.js"), encoding="utf-8").read()

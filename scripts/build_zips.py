@@ -58,12 +58,46 @@ def version():
     return m.group(1)
 
 
-def oracle_ip():
-    path = "/workspace/copytrader/ORACLE.md"
-    if not os.path.isfile(path):
-        return b""
-    m = re.search(r"`(\d+\.\d+\.\d+\.\d+)`", open(path, encoding="utf-8").read())
-    return m.group(1).encode() if m else b""
+# Address sources for the zip payload check. The first two are the local
+# gitignored configs; the last is the off-repo note that also holds the
+# server address. The check must never be skipped silently.
+DEFAULT_ADDRESS_SOURCES = (
+    os.path.join(ROOT, "miner", "sumo_config.json"),
+    os.path.join(ROOT, "stats", "sumo_config.js"),
+    "/workspace/copytrader/ORACLE.md",
+)
+
+
+def usable_ipv4(text):
+    """Return the first non-loopback IPv4 as bytes, or b''."""
+    data = text.encode("utf-8") if isinstance(text, str) else text
+    for hit in IPV4.findall(data):
+        s = hit.decode("ascii")
+        if s.startswith(("127.", "0.", "255.")):
+            continue
+        return hit
+    return b""
+
+
+def oracle_ip(sources=None):
+    """Return the private server IPv4 as bytes for the zip address check.
+
+    Tries the local gitignored miner config, then the stats config, then
+    ORACLE.md. Exits non-zero if every source is missing or none contains
+    a usable address. Never prints the address.
+    """
+    paths = tuple(sources) if sources is not None else DEFAULT_ADDRESS_SOURCES
+    found_file = False
+    for path in paths:
+        if not os.path.isfile(path):
+            continue
+        found_file = True
+        ip = usable_ipv4(open(path, encoding="utf-8").read())
+        if ip:
+            return ip
+    if not found_file:
+        raise SystemExit("server-address check failed: no address source file was found")
+    raise SystemExit("server-address check failed: no usable address in the source files")
 
 
 def check_payload(name, data, ip):

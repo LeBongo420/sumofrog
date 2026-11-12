@@ -77,6 +77,68 @@ def main():
     # dest/stats is not the live tree
     ok("staged stats dir is not the live stats/ tree",
        os.path.realpath(os.path.join(dest, "stats")) != stats)
+    ok("staged stats config is a regular file",
+       os.path.isfile(os.path.join(dest, "stats", "sumo_config.js"))
+       and not os.path.islink(os.path.join(dest, "stats", "sumo_config.js")))
+
+    msg = refused(b.stage_public_site, dest, "example").lower()
+    ok("stage refuses a non-empty publish folder", "non-empty" in msg)
+
+    empty = os.path.join(tmp, "empty-real")
+    os.mkdir(empty)
+    link_empty = os.path.join(tmp, "link-empty")
+    os.symlink(empty, link_empty)
+    msg = refused(b.stage_public_site, link_empty).lower()
+    ok("stage refuses a symlink publish folder", "symlink" in msg)
+
+    with_link = os.path.join(tmp, "has-symlink")
+    os.mkdir(with_link)
+    os.symlink(os.path.join(dest, "index.html"), os.path.join(with_link, "sneaky"))
+    msg = refused(b.stage_public_site, with_link).lower()
+    ok("stage refuses a publish folder that contains a symlink", "symlink" in msg)
+
+    # A symlink already sitting at the dest config must be replaced, not followed.
+    canary_dir = os.path.join(tmp, "canary-dir")
+    os.mkdir(canary_dir)
+    canary = os.path.join(tmp, "live-canary.js")
+    open(canary, "w", encoding="utf-8").write("LIVE_SECRET_SHOULD_STAY")
+    planted = os.path.join(canary_dir, "sumo_config.js")
+    os.symlink(canary, planted)
+    b.write_publishable_stats_config(canary_dir, "example")
+    ok("atomic write replaces a planted symlink",
+       not os.path.islink(planted) and os.path.isfile(planted))
+    ok("atomic write did not follow the planted symlink",
+       open(canary, encoding="utf-8").read() == "LIVE_SECRET_SHOULD_STAY")
+    ok("atomic write put a publishable config in place",
+       b.stats_config_is_publishable(open(planted, encoding="utf-8").read()))
+
+    # oracle_ip: both the local-config path and the missing-source path.
+    src_dir = os.path.join(tmp, "addr-sources")
+    os.mkdir(src_dir)
+    missing = os.path.join(src_dir, "missing.md")
+    msg = refused(z.oracle_ip, (missing,)).lower()
+    ok("oracle_ip fails when the address source is missing",
+       "source" in msg and ("found" in msg or "missing" in msg))
+
+    cfg = os.path.join(src_dir, "sumo_config.json")
+    open(cfg, "w", encoding="utf-8").write('{"rpc": "http://203.0.113.50:8080", "network": "private"}\n')
+    ip = z.oracle_ip(sources=(cfg,))
+    ok("oracle_ip reads an address from a local config", ip == b"203.0.113.50")
+
+    md = os.path.join(src_dir, "ORACLE.md")
+    open(md, "w", encoding="utf-8").write("host is `198.51.100.25` in the notes\n")
+    ip = z.oracle_ip(sources=(md,))
+    ok("oracle_ip reads an address from an oracle markdown file", ip == b"198.51.100.25")
+
+    loopback = os.path.join(src_dir, "loopback.json")
+    open(loopback, "w", encoding="utf-8").write('{"rpc": "http://127.0.0.1:8080"}\n')
+    msg = refused(z.oracle_ip, (loopback,)).lower()
+    ok("oracle_ip fails when the source has no usable address", "usable" in msg)
+
+    ip = z.oracle_ip()
+    ok("oracle_ip default sources yield an address",
+       isinstance(ip, (bytes, bytearray)) and z.IPV4.search(ip) is not None
+       and not ip.startswith(b"127.") and not ip.startswith(b"0.") and not ip.startswith(b"255."))
 
     # Miner zip is packed from git (HEAD), not the working tree.
     data = z.git_show("miner/sumo_config.example.json")
