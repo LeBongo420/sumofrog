@@ -1,4 +1,5 @@
 const SUMO = {
+  "network": "private",
   "program_id": "6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW",
   "config": "AjCSGvVNV2FcDxGjMQbc2QEuJMx144XpuivkDX4e4Pad",
   "mint": "7VNZhAWFCKjrZVKcbU2sXxT5mNAbzYh8qmtD7HfePabR",

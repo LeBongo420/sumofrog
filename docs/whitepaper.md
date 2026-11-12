@@ -2,7 +2,7 @@
 
 ### A small proof-of-work coin on Solana. The frog you mine.
 
-**Draft, 1 November 2026.** Author: lebongo420
+**Draft, 1 November 2026; revised 12 November 2026.** Author: [lebongo420](https://x.com/lebongo420)
 
 > **Test-network notice.** $SUMO currently lives only on a private test network and on Solana's
 > public test networks. Test SUMO is a **worthless test token**. It cannot be bought or sold, and
@@ -102,8 +102,10 @@ private key, and refuses them if they are typed in.
 - **No liquidity from the creator.** The creator will not create or fund a trading pool. If
   others ever choose to make a market, that is their own decision and their own risk.
 - **No sale, no allocation, no fees to the creator.** Every SUMO comes from a solved block.
-- **No social media.** There are no official accounts. Sumo Frog is found through a plain
-  website, this paper and the open code. Any account claiming to speak for it is not official.
+- **No official social media.** There is no official Sumo Frog account. The author's personal
+  X handle is [lebongo420](https://x.com/lebongo420). Any other account claiming to speak for
+  Sumo Frog is not official. The project is found through a plain website, this paper and the
+  open code.
 
 ## 7. Fixed rules
 

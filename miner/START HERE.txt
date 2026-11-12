@@ -5,8 +5,9 @@ SUMO FROG MINER — START HERE  (test coins only, no real money)
    (on Windows: right-click the example, Copy, Paste, then rename).
 
 2. Open sumo_config.json in Notepad. Replace YOUR_SERVER with the test
-   gateway address you were given. Save. The miner cannot connect until
-   you do this. Never put a real wallet, seed phrase or private key here.
+   gateway address you were given. Leave "network" set to "private" unless
+   you were told to switch it to "devnet". Save. The miner cannot connect
+   until you do this. Never put a real wallet, seed phrase or private key here.
 
 3. Double-click  Mine SUMO.bat
    If Windows says "Windows protected your PC", click "More info" then

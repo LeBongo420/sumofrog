@@ -18,8 +18,8 @@ Oracle server (public devnet later, once the devnet faucet works for us).
 
 The public Solana Explorer can't see the private network, so there are no explorer links for now.
 
-Mascot: an 8-bit sumo frog (v4 look: pixel art, synthwave sunset, high contrast). The art is made by
-`mockups_8bit/v4/art.py`, `scripts/make_miner_art.py` and `scripts/build_site.py`.
+Mascot: an 8-bit sumo frog (v4 look: pixel art, synthwave sunset, high contrast). Page headers, the
+token logo and the miner window icon are Pixy's. The site is built by `scripts/build_site.py`.
 
 Docs: [whitepaper](docs/whitepaper.md) · [mining guide](docs/mining-guide.md) · [payout address](docs/payout-address.md).
 
@@ -33,7 +33,9 @@ cp stats/sumo_config.example.js stats/sumo_config.js
 cp assets/metadata.example.json assets/metadata.json
 ```
 
-Then edit `YOUR_SERVER` in those files to your own test gateway. The real files are gitignored.
+Then edit `YOUR_SERVER` in those files to your own test gateway. Leave `"network"` as `"private"`
+unless you want the miner and stats page to use public Solana devnet (`"devnet"`). The real files
+are gitignored. Default is the private test chain; this does not deploy anything.
 
 
 ## The rules
@@ -64,11 +66,11 @@ miner notices and moves on to the new one.
 
 ## Mining on Windows
 
-**Easiest way (no Python knowledge needed):** unzip `docs/downloads/sumo-miner-v0.5.zip` into a folder and double-click
+**Easiest way (no Python knowledge needed):** unzip `docs/downloads/sumo-miner-v0.6.zip` into a folder and double-click
 `Mine SUMO.bat`. It reuses `.venv` if one is there (or makes one), installs `solders` only if it's missing,
 makes a test wallet only if `sumo-devnet-key.json` doesn't exist, gets test SOL for a new wallet, then mines.
 `Check balance.bat`, `Get test SOL.bat`, `Set payout address.bat` and `Withdraw SOL.bat` do what they say. Plain steps are in `miner/HOW TO MINE.txt`.
-Build the miner zip with: `python3 scripts/build_zips.py` (writes `docs/downloads/sumo-miner-v0.5.zip`). Testers copy `sumo_config.example.json` to `sumo_config.json` and replace `YOUR_SERVER` with the test gateway address they were given.
+Build the miner zip with: `python3 scripts/build_zips.py` (writes `docs/downloads/sumo-miner-v0.6.zip`). Testers copy `sumo_config.example.json` to `sumo_config.json` and replace `YOUR_SERVER` with the test gateway address they were given.
 
 The manual way:
 

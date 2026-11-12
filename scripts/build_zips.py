@@ -24,6 +24,8 @@ FILES = [
     "sumo_miner.py",
     "sumo_art.py",
     "sumo_config.example.json",
+    "sumo.ico",
+    "sumo_coin.ico",
     "requirements.txt",
 ]
 FORBIDDEN_NAMES = ("sumo_config.json", "payout-address", ".venv", "keypair",

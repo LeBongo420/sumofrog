@@ -44,7 +44,7 @@ from solders.pubkey import Pubkey
 from solders.transaction import Transaction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v0.5"
+VERSION = "v0.6"
 DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
 MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"
 TOKEN_PROGRAM = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
@@ -286,11 +286,26 @@ def plain_banner(info):
 
 # ======================= network =======================
 
+def apply_network(settings):
+    """Pick the RPC from a single "network" setting. Default is the private test chain.
+    "devnet" uses devnet_rpc (public Solana devnet). Does not deploy anything."""
+    settings["_shipped_rpc"] = settings.get("rpc")  # the private network link this zip shipped with
+    raw = str(settings.get("network") or "private").strip().lower().replace("_", "-")
+    if raw in ("devnet", "public-devnet"):
+        rpc = settings.get("devnet_rpc") or "https://api.devnet.solana.com"
+        settings["rpc"] = rpc
+        settings["network"] = "devnet"
+    elif raw in ("private", "private-test", ""):
+        settings["network"] = "private"
+    else:
+        sys.exit('Unknown network in sumo_config.json. Use "private" or "devnet". Stopping.')
+    return settings
+
+
 def load_settings():
     with open(os.path.join(HERE, "sumo_config.json")) as f:
         settings = json.load(f)
-    settings["_shipped_rpc"] = settings.get("rpc")  # the private network link this zip shipped with
-    return settings
+    return apply_network(settings)
 
 
 LOCAL_HOSTS = ("localhost", "127.0.0.1", "::1")
@@ -928,7 +943,39 @@ def load_key(path):
         return Keypair.from_bytes(bytes(json.load(f)))
 
 
+def set_window_icon():
+    """On Windows, use Pixy's frog as the console window / taskbar icon. No-op elsewhere.
+    Does not change the miner's console art."""
+    if sys.platform != "win32":
+        return
+    ico = os.path.join(HERE, "sumo.ico")
+    if not os.path.isfile(ico):
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+        user32 = ctypes.windll.user32
+        handle = user32.GetConsoleWindow()
+        if not handle:
+            return
+        IMAGE_ICON, LR_LOADFROMFILE = 1, 0x0010
+        WM_SETICON, ICON_SMALL, ICON_BIG = 0x0080, 0, 1
+        LoadImageW = user32.LoadImageW
+        LoadImageW.argtypes = [wintypes.HINSTANCE, wintypes.LPCWSTR, wintypes.UINT,
+                               ctypes.c_int, ctypes.c_int, wintypes.UINT]
+        LoadImageW.restype = wintypes.HANDLE
+        small = LoadImageW(None, ico, IMAGE_ICON, 16, 16, LR_LOADFROMFILE)
+        big = LoadImageW(None, ico, IMAGE_ICON, 32, 32, LR_LOADFROMFILE)
+        if big:
+            user32.SendMessageW(handle, WM_SETICON, ICON_BIG, big)
+        if small:
+            user32.SendMessageW(handle, WM_SETICON, ICON_SMALL, small)
+    except Exception:
+        pass
+
+
 def main():
+    set_window_icon()
     settings = load_settings()
     ap = argparse.ArgumentParser(description="Sumo Frog miner (test networks only, worthless test coins)")
     ap.add_argument("command", choices=["mine", "status", "balance", "new-key", "faucet", "set-payout", "withdraw"])

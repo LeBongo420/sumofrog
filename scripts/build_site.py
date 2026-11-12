@@ -41,6 +41,7 @@ body { margin:0; color:var(--white); font-family:var(--body); font-size:22px; li
 .hero { display:block; width:100%; height:auto; image-rendering:pixelated; border-bottom:4px solid var(--black); }
 nav { display:flex; flex-wrap:wrap; gap:12px; align-items:center; padding:12px 16px; background:var(--navy);
       border-bottom:4px solid var(--magenta); }
+nav .mascot { width:48px; height:48px; image-rendering:pixelated; flex:0 0 48px; border:3px solid var(--black); background:var(--navy); }
 nav a, nav span.tag { font-family:var(--pixel); font-size:14px; line-height:1; padding:9px 10px; color:var(--white);
       text-decoration:none; border:3px solid var(--grey); background:var(--navy2); }
 nav a:hover, nav a:focus { border-color:var(--yellow); color:var(--yellow); }
@@ -107,11 +108,12 @@ def page(title, nav, body, foot="", script="", header=None):
 <title>{title}</title>
 <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
 <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>{fonts}
 {CSS}</style></head>
 <body><div class="wrap">
 <img class="hero" src="{src}" alt="{alt}" width="{width}" height="{height}">
-<nav>{nav}<span class="tag">TESTNET</span></nav>
+<nav><img class="mascot" src="sumo_frog_icon.png" alt="The Sumo Frog mascot: a smiling 8-bit frog face in a neon pink frame." width="48" height="48">{nav}<span class="tag">TESTNET</span></nav>
 <main>
 {body}
 </main>
@@ -161,8 +163,16 @@ STATS_SCRIPT = """
 <script src="stats.js"></script>
 <script>
 const qs = new URLSearchParams(location.search);
-// Served by the Sumo gateway: talk to the same server. Opened as a file: use sumo_config.js.
-const RPC = qs.get("rpc") || (location.protocol.startsWith("http") ? location.origin : SUMO.rpc);
+// One setting: SUMO.network is "private" (default) or "devnet".
+// Served by the private gateway itself (port 8080): talk to this same origin.
+// Public https website, or opened as a file: use the config RPC (not this page's origin).
+function defaultRpc() {
+  const net = String(SUMO.network || "private").toLowerCase();
+  if (net === "devnet" || net === "public-devnet") return SUMO.devnet_rpc;
+  if (location.protocol === "http:" && location.port === "8080") return location.origin;
+  return SUMO.rpc;
+}
+const RPC = qs.get("rpc") || defaultRpc();
 const isDevnet = RPC.includes("devnet.solana.com");
 const isLocal = RPC.includes("127.0.0.1") || RPC.includes("localhost");
 document.getElementById("net").textContent = isDevnet ? "Solana devnet" : isLocal ? "local test validator" : "private Sumo test network";
@@ -237,8 +247,8 @@ double-click <strong>Mine SUMO</strong>. Full steps, screenshots and safety note
 <li><a href="../stats/index.html">Stats</a> — live blocks, reward and top miners (needs the test gateway)</li>
 <li><a href="https://github.com/LeBongo420/sumofrog">Code on GitHub</a> — private for now; link is a placeholder until the repo is published</li>
 </ul>
-<p>There are <strong>no official social media accounts</strong>. Any account claiming to speak for Sumo Frog is not
-official. Author: <strong>lebongo420</strong>.</p>
+<p>There are <strong>no official social media accounts</strong>. The author's personal X handle is
+<a href="https://x.com/lebongo420">lebongo420</a>. Any other account claiming to speak for Sumo Frog is not official.</p>
 """
 
 
@@ -279,12 +289,16 @@ def images():
     token_256 = os.path.join(pixy, "token_256.png")
     token_32 = os.path.join(pixy, "token_32.png")
     token_16 = os.path.join(pixy, "token_16.png")
+    frog_icon = Image.open(os.path.join(pixy, "frog_icon.png")).convert("RGBA")
+    touch = frog_icon.resize((180, 180), Image.Resampling.NEAREST)
     for d in ("docs", "stats"):
         dest = os.path.join(ROOT, d)
         hdr.save(os.path.join(dest, "sumo_header.png"), optimize=True)
         shutil.copy(token_256, os.path.join(dest, "sumo_logo.png"))
         shutil.copy(token_32, os.path.join(dest, "favicon-32.png"))
         shutil.copy(token_16, os.path.join(dest, "favicon-16.png"))
+        frog_icon.save(os.path.join(dest, "sumo_frog_icon.png"), optimize=True)
+        touch.save(os.path.join(dest, "apple-touch-icon.png"), optimize=True)
     save_jpeg(os.path.join(pixy, "header_guide.jpg"), os.path.join(ROOT, "docs", "header_guide.jpg"))
     save_jpeg(os.path.join(pixy, "header_whitepaper.jpg"), os.path.join(ROOT, "docs", "header_whitepaper.jpg"))
     save_jpeg(os.path.join(pixy, "header_stats.jpg"), os.path.join(ROOT, "stats", "header_stats.jpg"))

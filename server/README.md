@@ -20,7 +20,7 @@ The gateway is the only thing reachable from outside (once the Oracle rule below
   no getProgramAccounts, no batches, no websockets, bodies max 16 KB;
 - rate-limits each IP (10 req/s, sendTransaction 2/s);
 - faucet (`requestAirdrop`): max 1 test SOL per request, 1 per IP per 10 min, 5 per IP per day, 200 per day total;
-- serves the stats page at `/` and the token metadata at `/metadata.json`.
+- serves the static website at `/` (home, guide, whitepaper; stats at `/stats/`) and the token metadata at `/metadata.json`.
 
 Ports 8899/8900/9900 bind 0.0.0.0 but the server's iptables REJECTs everything except 22 and 8080,
 and the Oracle security list allows only 22 and 8080 (Josh added the 8080 rule on 31 Oct 2026:
@@ -100,3 +100,40 @@ $R 'sudo iptables -D INPUT -p tcp -m state --state NEW -m tcp --dport 8080 -m co
 Then delete the 8080 ingress rule in the Oracle console. `~/sumo/` can be deleted afterwards
 (pre-change iptables file kept at `~/sumo/rules.v4.pre_sumo`). Wiping `~/sumo/ledger` resets the chain;
 the program would then need redeploying and `scripts/setup.ts` rerunning.
+
+## Public HTTPS for the website only (prepared, not yet live)
+
+Josh said yes to this on 12 November 2026. It is **not live yet**: it needs a hostname and two
+Oracle console rules (see below). Until those are in place, leave Caddy uninstalled and ports
+80/443 closed.
+
+The plan is the simplest free route: **Caddy** with automatic Let's Encrypt certificates.
+
+| | |
+|---|---|
+| What is public on 443 (and 80 for the certificate check) | The static website only (home, guide, whitepaper, stats page) |
+| What stays off 443 | The filtered JSON-RPC gateway, the validator, and every other service |
+| JSON-RPC | Remains on port 8080 (HTTP), as today |
+| Config templates | `Caddyfile.example`, `sumo-site.service` (YOUR_DOMAIN placeholder, no server address) |
+| Site files on the server | `/home/ubuntu/sumo/site` (assembled from `docs/` + `stats/`) |
+
+Caddy will refuse POST on 80/443, so the test-network RPC cannot be reached through the website.
+
+### What has to come from Josh before this can go live
+
+1. **A hostname** (a domain Josh already owns, or a free one such as a DuckDNS name) with an
+   A record pointed at the same server that already serves the test site on port 8080.
+   Let's Encrypt will not issue a certificate without a real hostname. An IP address is not enough,
+   and we will not use an IP-based name.
+2. **Two ingress rules in the Oracle console**, same place as the existing port 8080 rule:
+   - TCP, source `0.0.0.0/0` (or Josh's home IP `/32`), destination port **80**
+   - TCP, source `0.0.0.0/0` (or Josh's home IP `/32`), destination port **443**
+   Without these, the cloud firewall drops 80 and 443 even if iptables on the machine allows them.
+
+Once both are ready, the remaining work is: install Caddy, copy the website into
+`/home/ubuntu/sumo/site`, put a Caddyfile with the hostname in `/home/ubuntu/sumo/Caddyfile`,
+allow 80 and 443 in iptables (saved to `/etc/iptables/rules.v4`, comments `sumo-site-http` and
+`sumo-site-https`), and start `sumo-site.service`. No tunnel is used. The validator stays bound
+as it is today; iptables continues to reject its ports.
+
+Do not announce the site or turn on GitHub Pages as part of this step.

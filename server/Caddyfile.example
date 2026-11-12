@@ -1,0 +1,19 @@
+# Sumo Frog public website (Caddy + Let's Encrypt).
+# Replace YOUR_DOMAIN with a hostname that already points at this server.
+# Never put a server IP address in this file.
+#
+# Serves ONLY the static website on ports 80 and 443.
+# Does not proxy JSON-RPC or the validator. The filtered test-network
+# gateway stays on port 8080 (HTTP) and is not exposed here.
+
+YOUR_DOMAIN {
+	encode gzip
+	root * /home/ubuntu/sumo/site
+	file_server
+
+	# Refuse POST so the JSON-RPC API cannot be reached on 443/80.
+	@rpc {
+		method POST
+	}
+	respond @rpc 405
+}

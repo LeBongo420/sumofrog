@@ -10,7 +10,8 @@ First time on this PC (or updating the old folder)
    Never delete it: it holds your test SUMO.
 4. In that folder, copy sumo_config.example.json to sumo_config.json (if you
    don't already have one). Open sumo_config.json and replace YOUR_SERVER with
-   the test gateway address you were given. The miner cannot connect until you do.
+   the test gateway address you were given. Leave "network" set to "private"
+   unless you were told to switch it to "devnet". The miner cannot connect until you do.
 5. Open that folder and double-click  Mine SUMO.bat
 6. If Windows asks whether to run it, click "Run". If it says "Windows protected your PC",
    click "More info" then "Run anyway". (It's a plain text script: right-click it and

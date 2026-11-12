@@ -3,7 +3,7 @@
 
 - POST /        JSON-RPC proxy to 127.0.0.1:8899, allowlisted read + sendTransaction methods only.
 - requestAirdrop: max 1 test SOL per request, 1 per IP per 10 min, 5 per IP per day, 200 per day total.
-- GET /         stats page (+ stats.js, sumo_config.js, sumo_frog.png, metadata.json) from ./www.
+- GET /         static website from ./www (home, guide, whitepaper, stats at /stats/). Safe paths only.
 Worthless test network. No keys live here. Stdlib only.
 """
 import json, os, sys, time, threading, urllib.request
@@ -27,7 +27,9 @@ AIRDROP_GLOBAL_DAY = 200
 RATE, BURST = 10.0, 60.0          # requests per second per IP, bucket size
 SEND_RATE, SEND_BURST = 2.0, 10.0  # sendTransaction per second per IP
 TYPES = {".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8",
-         ".png": "image/png", ".json": "application/json", ".jpg": "image/jpeg"}
+         ".png": "image/png", ".json": "application/json", ".jpg": "image/jpeg",
+         ".jpeg": "image/jpeg", ".zip": "application/zip", ".txt": "text/plain; charset=utf-8",
+         ".ico": "image/x-icon"}
 
 lock = threading.Lock()
 buckets, send_buckets = {}, {}
@@ -130,12 +132,18 @@ class H(BaseHTTPRequestHandler):
         path = self.path.split("?")[0]
         if path in ("/", ""):
             path = "/index.html"
-        name = os.path.basename(path)
-        f = os.path.join(WWW, name)
-        if path != "/" + name or not os.path.isfile(f):
+        if path.endswith("/"):
+            path = path + "index.html"
+        rel = path.lstrip("/")
+        parts = rel.split("/")
+        if (not rel or ".." in parts or "" in parts or any(("\\" in p) or (chr(0) in p) for p in parts)):
+            return self.reply(404, b"not found", "text/plain")
+        root = os.path.abspath(WWW)
+        f = os.path.abspath(os.path.join(root, rel))
+        if os.path.commonpath([root, f]) != root or not os.path.isfile(f):
             return self.reply(404, b"not found", "text/plain")
         with open(f, "rb") as fh:
-            self.reply(200, fh.read(), TYPES.get(os.path.splitext(name)[1], "application/octet-stream"))
+            self.reply(200, fh.read(), TYPES.get(os.path.splitext(f)[1], "application/octet-stream"))
 
     def do_POST(self):
         ip = self.client_address[0]
