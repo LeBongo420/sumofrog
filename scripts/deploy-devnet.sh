@@ -22,14 +22,15 @@ esac
 URI="${1:-}"
 BLOCKS="${2:-5}"
 DEPLOYER=.keys/deployer.json
-PROGRAM_ID=$(solana-keygen pubkey target/deploy/sumofrog-keypair.json)
+PROGRAM_KEY=.keys/program.json
+PROGRAM_ID=$(solana-keygen pubkey "$PROGRAM_KEY")
 echo "Deployer $(solana-keygen pubkey $DEPLOYER): $(solana balance -u $RPC $DEPLOYER)"
 
 if solana program show -u "$RPC" "$PROGRAM_ID" >/dev/null 2>&1; then
   echo "Program already deployed: $PROGRAM_ID"
 else
   solana program deploy -u "$RPC" --use-rpc --keypair "$DEPLOYER" --upgrade-authority "$DEPLOYER" \
-    --program-id target/deploy/sumofrog-keypair.json target/deploy/sumofrog.so
+    --program-id "$PROGRAM_KEY" target/deploy/sumofrog.so
 fi
 
 ANCHOR_PROVIDER_URL=$RPC ANCHOR_WALLET=$DEPLOYER npx ts-node --transpile-only scripts/setup.ts $URI

@@ -68,46 +68,63 @@ DEFAULT_ADDRESS_SOURCES = (
 )
 
 
-def usable_ipv4(text):
-    """Return the first non-loopback IPv4 as bytes, or b''."""
+def usable_ipv4s(text):
+    """Return every unique non-loopback IPv4 as bytes, in the order found."""
     data = text.encode("utf-8") if isinstance(text, str) else text
+    out = []
+    seen = set()
     for hit in IPV4.findall(data):
         s = hit.decode("ascii")
         if s.startswith(("127.", "0.", "255.")):
             continue
-        return hit
-    return b""
+        if hit not in seen:
+            seen.add(hit)
+            out.append(hit)
+    return tuple(out)
+
+
+def usable_ipv4(text):
+    """Return the first non-loopback IPv4 as bytes, or b''."""
+    found = usable_ipv4s(text)
+    return found[0] if found else b""
 
 
 def oracle_ip(sources=None):
-    """Return the private server IPv4 as bytes for the zip address check.
+    """Return every private server IPv4 found in the address sources, as a tuple of bytes.
 
-    Tries the local gitignored miner config, then the stats config, then
-    ORACLE.md. Exits non-zero if every source is missing or none contains
-    a usable address. Never prints the address.
+    Reads the local gitignored miner config, the stats config, and ORACLE.md
+    (or the paths in sources). Collects every usable address from every
+    source that exists. Exits non-zero if every source is missing or none
+    contains a usable address. Never prints an address.
     """
     paths = tuple(sources) if sources is not None else DEFAULT_ADDRESS_SOURCES
     found_file = False
+    ips = []
+    seen = set()
     for path in paths:
         if not os.path.isfile(path):
             continue
         found_file = True
-        ip = usable_ipv4(open(path, encoding="utf-8").read())
-        if ip:
-            return ip
+        for ip in usable_ipv4s(open(path, encoding="utf-8").read()):
+            if ip not in seen:
+                seen.add(ip)
+                ips.append(ip)
     if not found_file:
         raise SystemExit("server-address check failed: no address source file was found")
-    raise SystemExit("server-address check failed: no usable address in the source files")
+    if not ips:
+        raise SystemExit("server-address check failed: no usable address in the source files")
+    return tuple(ips)
 
 
-def check_payload(name, data, ip):
+def check_payload(name, data, ips):
     lower = name.lower()
     if any(n in lower or n in name for n in FORBIDDEN_NAMES):
         raise SystemExit(f"refusing to pack forbidden name: {name}")
     if name == "sumo_config.json" or name.endswith("/sumo_config.json"):
         raise SystemExit("refusing to pack real sumo_config.json")
-    if ip and ip in data:
-        raise SystemExit(f"server address found in {name}")
+    for ip in ips:
+        if ip and ip in data:
+            raise SystemExit(f"server address found in {name}")
     if PEM.search(data) or KEYPAIR.search(data):
         raise SystemExit(f"key material found in {name}")
     if name.endswith(".json") or name.endswith(".js") or name.endswith(".py") or name.endswith(".txt"):
@@ -125,11 +142,11 @@ def build():
     dest_dir = os.path.join(ROOT, "docs", "downloads")
     os.makedirs(dest_dir, exist_ok=True)
     out = os.path.join(dest_dir, name)
-    ip = oracle_ip()
+    ips = oracle_ip()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for f in FILES:
             data = git_show(f"miner/{f}")
-            check_payload(f, data, ip)
+            check_payload(f, data, ips)
             # flat name only — no directories, no usernames
             if os.path.basename(f) != f or "/" in f or "\\" in f:
                 raise SystemExit(f"refusing nested path: {f}")
@@ -145,7 +162,7 @@ def build():
         if "sumo_config.example.json" not in names:
             raise SystemExit("zip missing example config")
     raw = open(out, "rb").read()
-    if ip and ip in raw:
+    if any(ip in raw for ip in ips):
         os.remove(out)
         raise SystemExit("server address found in zip bytes")
     sha = hashlib.sha256(raw).hexdigest()

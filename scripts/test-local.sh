@@ -73,11 +73,22 @@ cargo test -p sumofrog --lib 2>&1 | tee -a "$LOG"
 echo "== build"
 anchor build 2>&1 | grep -v "overflows the maximum allowed frame space" | tail -3 || true
 test -f target/deploy/sumofrog.so
+# anchor build writes a keypair only if one is missing. That auto-generated
+# key is not the program key (deploy scripts use .keys/program.json). Remove
+# it so a stray or wrong key is not left behind.
+if [ -f target/deploy/sumofrog-keypair.json ]; then
+  shred -u -n 3 target/deploy/sumofrog-keypair.json 2>/dev/null || rm -f target/deploy/sumofrog-keypair.json
+fi
 
 echo "== integration tests (own validator on this machine's port $RPC_PORT)"
 mkdir -p .anchor  # a fresh clone has no .anchor/, and the validator can't start without it
 rm -rf "$LEDGER"
-PID=$(solana-keygen pubkey target/deploy/sumofrog-keypair.json)
+# Public program address from Anchor.toml; no key file needed to load the .so.
+PID=$(awk -F '"' '/^sumofrog = / { print $2; exit }' Anchor.toml)
+if [ -z "$PID" ]; then
+  echo "FAIL: program id not found in Anchor.toml"
+  exit 1
+fi
 solana-test-validator --reset --quiet --ledger "$LEDGER" --bind-address 127.0.0.1 \
   --rpc-port "$RPC_PORT" --faucet-port "$FAUCET_PORT" --gossip-port "$GOSSIP_PORT" --dynamic-port-range "$DYN_PORTS" \
   --upgradeable-program "$PID" target/deploy/sumofrog.so "$TESTKEY" \

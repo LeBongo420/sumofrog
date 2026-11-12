@@ -1,15 +1,24 @@
 #!/usr/bin/env python3
 """Usage: write_config.py RPC_URL [PRIVATE_GENESIS_HASH]
 Write the program ID and derived addresses into the miner and stats page configs."""
-import json, os, sys
+import json, os, re, sys
 from solders.pubkey import Pubkey
-from solders.keypair import Keypair
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 rpc = sys.argv[1] if len(sys.argv) > 1 else "https://api.devnet.solana.com"
 private_genesis = sys.argv[2] if len(sys.argv) > 2 else None  # genesis hash of the private Sumo network
-with open(os.path.join(ROOT, "target/deploy/sumofrog-keypair.json")) as f:
-    program = Keypair.from_bytes(bytes(json.load(f))).pubkey()
+
+
+def program_id():
+    """Public program address from Anchor.toml — no key file needed."""
+    text = open(os.path.join(ROOT, "Anchor.toml"), encoding="utf-8").read()
+    m = re.search(r'^\s*sumofrog\s*=\s*"([1-9A-HJ-NP-Za-km-z]{32,44})"', text, re.M)
+    if not m:
+        raise SystemExit("program id not found in Anchor.toml")
+    return Pubkey.from_string(m.group(1))
+
+
+program = program_id()
 config = Pubkey.find_program_address([b"config"], program)[0]
 mint = Pubkey.find_program_address([b"mint"], program)[0]
 cfg = {"program_id": str(program), "config": str(config), "mint": str(mint), "rpc": rpc}

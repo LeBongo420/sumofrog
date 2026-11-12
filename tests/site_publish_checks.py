@@ -80,6 +80,15 @@ def main():
     ok("staged stats config is a regular file",
        os.path.isfile(os.path.join(dest, "stats", "sumo_config.js"))
        and not os.path.islink(os.path.join(dest, "stats", "sumo_config.js")))
+    cfg_path = os.path.join(dest, "stats", "sumo_config.js")
+    ok("published stats/sumo_config.js is mode 644",
+       (os.stat(cfg_path).st_mode & 0o777) == 0o644)
+    published_modes = []
+    for dirpath, _dirnames, filenames in os.walk(dest):
+        for name in filenames:
+            published_modes.append(os.stat(os.path.join(dirpath, name)).st_mode & 0o777)
+    ok("all published files are mode 644",
+       published_modes and all(mode == 0o644 for mode in published_modes))
 
     msg = refused(b.stage_public_site, dest, "example").lower()
     ok("stage refuses a non-empty publish folder", "non-empty" in msg)
@@ -122,23 +131,44 @@ def main():
 
     cfg = os.path.join(src_dir, "sumo_config.json")
     open(cfg, "w", encoding="utf-8").write('{"rpc": "http://203.0.113.50:8080", "network": "private"}\n')
-    ip = z.oracle_ip(sources=(cfg,))
-    ok("oracle_ip reads an address from a local config", ip == b"203.0.113.50")
+    ips = z.oracle_ip(sources=(cfg,))
+    ok("oracle_ip reads an address from a local config", ips == (b"203.0.113.50",))
 
     md = os.path.join(src_dir, "ORACLE.md")
     open(md, "w", encoding="utf-8").write("host is `198.51.100.25` in the notes\n")
-    ip = z.oracle_ip(sources=(md,))
-    ok("oracle_ip reads an address from an oracle markdown file", ip == b"198.51.100.25")
+    ips = z.oracle_ip(sources=(md,))
+    ok("oracle_ip reads an address from an oracle markdown file", ips == (b"198.51.100.25",))
 
     loopback = os.path.join(src_dir, "loopback.json")
     open(loopback, "w", encoding="utf-8").write('{"rpc": "http://127.0.0.1:8080"}\n')
     msg = refused(z.oracle_ip, (loopback,)).lower()
     ok("oracle_ip fails when the source has no usable address", "usable" in msg)
 
-    ip = z.oracle_ip()
-    ok("oracle_ip default sources yield an address",
-       isinstance(ip, (bytes, bytearray)) and z.IPV4.search(ip) is not None
-       and not ip.startswith(b"127.") and not ip.startswith(b"0.") and not ip.startswith(b"255."))
+    # Explicit tmp files only, so this works on a clean checkout with no ORACLE.md.
+    multi = os.path.join(src_dir, "multi.txt")
+    open(multi, "w", encoding="utf-8").write(
+        "version 1.2.3.4 and host 203.0.113.50 and also 127.0.0.1\n"
+    )
+    ips = z.oracle_ip(sources=(multi,))
+    ok("oracle_ip returns every usable address in a source",
+       ips == (b"1.2.3.4", b"203.0.113.50"))
+
+    ips = z.oracle_ip(sources=(cfg, md, loopback, missing))
+    ok("oracle_ip collects addresses from every source",
+       ips == (b"203.0.113.50", b"198.51.100.25"))
+
+    msg = refused(
+        z.check_payload, "icon.ico", b"payload 198.51.100.25 only",
+        (b"203.0.113.50", b"198.51.100.25"),
+    ).lower()
+    ok("check_payload refuses the second address too", "address" in msg)
+    msg = refused(
+        z.check_payload, "icon.ico", b"payload 203.0.113.50 only",
+        (b"203.0.113.50", b"198.51.100.25"),
+    ).lower()
+    ok("check_payload refuses the first address", "address" in msg)
+    z.check_payload("icon.ico", b"no addresses here", (b"203.0.113.50", b"198.51.100.25"))
+    ok("check_payload allows a payload with none of the addresses", True)
 
     # Miner zip is packed from git (HEAD), not the working tree.
     data = z.git_show("miner/sumo_config.example.json")

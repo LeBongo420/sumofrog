@@ -392,6 +392,8 @@ def write_file_atomic(dest, data):
                 fh.write(data)
                 fh.flush()
                 os.fsync(fh.fileno())
+        # mkstemp creates mode 600; the web server user needs to read the published file.
+        os.chmod(tmp, 0o644)
         os.replace(tmp, dest)
         tmp = None
     finally:
