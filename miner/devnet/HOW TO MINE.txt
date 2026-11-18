@@ -15,7 +15,8 @@ First time on this PC (or updating the old folder)
    folder and put the other somewhere safe, for example a folder called "old wallet".
    The old program files left next to the buttons (sumo_miner.py, .venv and so on) are no longer
    used and can be ignored.
-   If you extract somewhere new instead, copy sumo-devnet-key.json into the "files" folder yourself.
+   If you extract somewhere new instead, MOVE sumo-devnet-key.json (cut and paste, do not copy)
+   from the old folder into the new "files" folder yourself, so only one wallet file is left.
    The wallet is NOT in the zip.
 4. This zip is already set to the public Solana devnet (files\sumo_config.json is included).
    There is nothing to edit. You need Python 3 installed (python.org, tick "Add python.exe to PATH").

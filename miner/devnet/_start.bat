@@ -30,7 +30,9 @@ echo.
 echo  !! THE WALLET COULD NOT BE MOVED. No wallet was moved or made.
 echo  The wallet file sumo-devnet-key.json is still next to the buttons.
 echo  DON'T DELETE sumo-devnet-key.json: it holds your test SUMO.
-echo  To carry on, copy it into the files folder yourself, then try again.
+echo  To carry on, MOVE it (do not copy) into the files folder yourself, for example by
+echo  cutting and pasting it. A copy left next to the buttons would make the miner stop
+echo  again with Two wallets found. Then try again.
 exit /b 2
 
 :two_payouts
@@ -45,6 +47,8 @@ exit /b 2
 :payout_move_failed
 echo.
 echo  !! THE PAYOUT FILE COULD NOT BE MOVED. No new wallet was made.
-echo  Your wallet is already in the files folder. The file payout-address.txt
-echo  is still next to the buttons. Copy it into the files folder yourself, then try again.
+echo  The file payout-address.txt is still next to the buttons.
+echo  To carry on, MOVE it (do not copy) into the files folder yourself, for example by
+echo  cutting and pasting it. A copy left next to the buttons would make the miner stop
+echo  again with Two payout files found. Then try again.
 exit /b 2

@@ -282,6 +282,19 @@ def main():
     ok("_start.bat only ever runs 'move' on the wallet and payout files: no copy, delete or overwrite",
        sum('move "' in l for l in cmds) == 2
        and not any(w in l.lower() for l in cmds for w in ("copy ", " del ", "erase", "rmdir", "move /y", "xcopy")))
+    for lab in ("wallet_move_failed", "payout_move_failed"):
+        block = start[start.index(":" + lab):]
+        block = block[:block.index("exit /b 2")]
+        block = " ".join(l[4:].strip() if l.lower().startswith("echo") else l for l in block.splitlines())
+        ok(f"_start.bat :{lab} tells people to MOVE the file, not copy it",
+           "MOVE it (do not copy)" in block and "copy it" not in block.lower().replace("do not copy", ""))
+        ok(f"_start.bat :{lab} explains a leftover copy brings the stop back",
+           "A copy left next to the buttons would make the miner stop again" in block)
+    payout_block = start[start.index(":payout_move_failed"):]
+    ok("_start.bat payout message does not assume the person has a wallet in files",
+       "Your wallet is already" not in payout_block)
+    ok("_start.bat has no 'copy it' anywhere in what it shows",
+       "copy it" not in " ".join(l.lower() for l in start.splitlines() if l.lower().startswith("echo")))
     ok("_start.bat says no wallet was moved or made when it stops on two wallets",
        "No wallet was moved or made" in start and "Nothing was changed" not in start)
     ok("Mine SUMO.bat stops safely on the two-wallet case and never makes a wallet then",
@@ -295,6 +308,8 @@ def main():
         ok(f"{guide}: says never delete sumo-devnet-key.json", "NEVER delete sumo-devnet-key.json" in flat)
         ok(f"{guide}: no 'can be deleted' wording anywhere", "can be deleted" not in flat.lower()
            and "may be deleted" not in flat.lower())
+        ok(f"{guide}: never tells people to copy the wallet file",
+           "copy sumo-devnet-key" not in flat.lower() and "copy it" not in flat.lower())
         ok(f"{guide}: explains the 'Two wallets found' stop", "Two wallets found" in flat)
     print(f"site publish checks: {passed} passed")
 
