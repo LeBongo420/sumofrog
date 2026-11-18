@@ -1,0 +1,24 @@
+SUMO FROG MINER (devnet) — START HERE  (test coins only, no real money)
+=======================================================================
+
+You need Python 3 installed first (free): https://www.python.org/downloads/
+Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
+
+1. Right-click the zip, choose "Extract All...", pick a folder.
+
+2. Double-click  Mine SUMO.bat
+   If Windows says "Windows protected your PC", click "More info" then
+   "Run anyway". It's a plain text script: right-click it and choose Edit
+   to see what it does.
+   The first run makes a test wallet and shows its address. It will then say
+   it needs test SOL: that's normal, go to step 3.
+
+3. Get free test SOL: open https://faucet.solana.com, sign in with GitHub,
+   pick "Devnet", paste the wallet address from step 2 (or double-click
+   Check balance.bat to see it again), and request the most it allows.
+
+4. Double-click  Mine SUMO.bat again. Mining starts.
+
+This zip is already set to the public Solana devnet. No settings to edit.
+Never put a real wallet, seed phrase or private key anywhere.
+Full steps, payout address and withdraw: see HOW TO MINE.txt

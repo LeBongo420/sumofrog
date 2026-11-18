@@ -4,9 +4,12 @@
 Flat zip (no folders). Packed from git (committed tracked files only),
 never the working tree, so ignored sumo_config.json, keys and keypairs
 cannot be included. The example config is packed; the real config is not.
-Usage: python3 scripts/build_zips.py
+Usage: python3 scripts/build_zips.py            (private-chain zip)
+       python3 scripts/build_zips.py --devnet   (sumo-miner-v<version>-devnet.zip: ships a
+       ready sumo_config.json set to public devnet, plus devnet START HERE / HOW TO MINE text)
 """
 import hashlib
+import json
 import os
 import re
 import subprocess
@@ -30,6 +33,14 @@ FILES = [
     "sumo_coin.ico",
     "requirements.txt",
 ]
+# Devnet zip: same code files, but three files come from miner/devnet/. The shipped config is
+# stored there under a different name so it can never be mistaken for the ignored real config.
+DEVNET_SWAP = {
+    "START HERE.txt": "devnet/START HERE.txt",
+    "HOW TO MINE.txt": "devnet/HOW TO MINE.txt",
+    "sumo_config.example.json": "devnet/sumo_config.devnet.json",
+}
+DEVNET_ARCNAME = {"sumo_config.example.json": "sumo_config.json"}
 FORBIDDEN_NAMES = ("sumo_config.json", "payout-address", ".venv", "keypair",
                    "id.json", "sumo-devnet-key", ".keys", "target/")
 # Hosts allowed in the example: placeholder only.
@@ -136,31 +147,54 @@ def check_payload(name, data, ips):
             raise SystemExit(f"unexpected address in {name}")
 
 
-def build():
+def check_devnet_config(data):
+    """The shipped devnet config must say devnet, name no private server and no private genesis."""
+    cfg = json.loads(data)
+    if cfg.get("network") != "devnet":
+        raise SystemExit("devnet config must set network to devnet")
+    if set(cfg) - {"network", "program_id", "config", "mint", "devnet_rpc"}:
+        raise SystemExit("devnet config has unexpected keys (no rpc/private_genesis/payout allowed)")
+    if cfg.get("devnet_rpc") != "https://api.devnet.solana.com":
+        raise SystemExit("devnet config must use the public devnet RPC")
+    if b"YOUR_SERVER" in data:
+        raise SystemExit("devnet config still has the server placeholder")
+
+
+def build(devnet=False):
     ver = version()
-    name = f"sumo-miner-v{ver}.zip"
+    name = f"sumo-miner-v{ver}-devnet.zip" if devnet else f"sumo-miner-v{ver}.zip"
     dest_dir = os.path.join(ROOT, "docs", "downloads")
     os.makedirs(dest_dir, exist_ok=True)
     out = os.path.join(dest_dir, name)
     ips = oracle_ip()
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         for f in FILES:
-            data = git_show(f"miner/{f}")
-            check_payload(f, data, ips)
+            src = DEVNET_SWAP.get(f, f) if devnet else f
+            arc = DEVNET_ARCNAME.get(f, f) if devnet else f
+            data = git_show(f"miner/{src}")
+            if devnet and f == "sumo_config.example.json":
+                check_devnet_config(data)
+                check_payload("sumo_config.devnet.json", data, ips)
+            else:
+                check_payload(f, data, ips)
             # flat name only — no directories, no usernames
             if os.path.basename(f) != f or "/" in f or "\\" in f:
                 raise SystemExit(f"refusing nested path: {f}")
-            info = zipfile.ZipInfo(f, date_time=(2026, 11, 1, 0, 0, 0))
+            info = zipfile.ZipInfo(arc, date_time=(2026, 11, 1, 0, 0, 0))
             info.compress_type = zipfile.ZIP_DEFLATED
             info.external_attr = 0o644 << 16
             z.writestr(info, data)
         names = z.namelist()
         if any("/" in n or "\\" in n for n in names):
             raise SystemExit("zip contains a folder path")
-        if "sumo_config.json" in names:
-            raise SystemExit("zip contains real config")
-        if "sumo_config.example.json" not in names:
-            raise SystemExit("zip missing example config")
+        if devnet:
+            if "sumo_config.json" not in names or "sumo_config.example.json" in names:
+                raise SystemExit("devnet zip must ship sumo_config.json and no example config")
+        else:
+            if "sumo_config.json" in names:
+                raise SystemExit("zip contains real config")
+            if "sumo_config.example.json" not in names:
+                raise SystemExit("zip missing example config")
     raw = open(out, "rb").read()
     if any(ip in raw for ip in ips):
         os.remove(out)
@@ -173,4 +207,5 @@ def build():
 
 
 if __name__ == "__main__":
-    build()
+    import sys
+    build(devnet="--devnet" in sys.argv[1:])

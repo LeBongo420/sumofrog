@@ -1,0 +1,66 @@
+SUMO FROG MINER for Windows  (test coins on Solana devnet: no real money)
+=========================================================================
+
+First time on this PC (or updating the old folder)
+1. Close any miner window that's still running.
+2. Right-click the zip and choose "Extract All...".
+3. Pick a folder to keep it in (for example your Downloads folder), or your
+   existing miner folder if you're updating, and say "Replace the files" if Windows asks.
+   Your wallet file sumo-devnet-key.json is NOT in the zip, so it stays as it is.
+   Never delete it: it holds your test SUMO.
+4. This zip is already set to the public Solana devnet (sumo_config.json is included).
+   There is nothing to edit. You need Python 3 installed (python.org, tick "Add python.exe to PATH").
+5. Open that folder and double-click  Mine SUMO.bat
+   The first run makes a test wallet and shows its address, then says it needs test SOL.
+   Get free devnet SOL at https://faucet.solana.com (sign in with GitHub, pick Devnet,
+   paste that address; Check balance.bat shows it again), then double-click Mine SUMO.bat again.
+6. If Windows asks whether to run it, click "Run". If it says "Windows protected your PC",
+   click "More info" then "Run anyway". (It's a plain text script: right-click it and
+   choose "Edit" to see exactly what it does.)
+7. The first run sets itself up for a minute. Then mining starts.
+   The box on the right says  >> MINING...  while it works, and
+   *** BLOCK FOUND! +20 SUMO ***  when you win a block.
+8. To stop, close the window or press Ctrl+C.
+
+What the numbers mean
+- BLOCK       the block everyone is racing for right now
+- HASH/S      how many guesses your PC makes per second
+- GUESS #     how many guesses it has made on this block so far
+- DIFF        how hard a block is (each +1 doubles the work)
+- REWARD      SUMO for winning a block (20 now; it halves once a year)
+- MINED       blocks you've won since you opened the window
+- BALANCE     SUMO in the wallet your rewards go to
+- HALVING IN  blocks left until the reward halves
+
+Sending rewards to your own wallet (optional)
+- Double-click  Set payout address.bat  and paste your wallet's PUBLIC address
+  (the one you'd share to receive coins). Type YES to confirm.
+- From then on the miner sends each reward there. The miner's own test wallet
+  still pays the tiny test fees.
+- NEVER type a seed phrase or private key into the miner or anything else.
+  The miner refuses them and never asks for them.
+- To go back to the miner's own wallet, run it again and type  none
+
+Taking your test SOL back out (optional)
+- Double-click  Withdraw SOL.bat  when you've finished mining on this PC.
+- Paste your wallet's PUBLIC address, or press Enter to use your payout address.
+- It shows how much test SOL it will send and where, then asks  y/N  first.
+  It sends all of it minus the tiny fee, so the miner's wallet ends at 0.
+- If the miner's wallet holds SUMO too (no payout address), it asks if you
+  want to send that as well.
+- It refuses seed phrases, private keys, program addresses and the miner's
+  own address, and never asks for a key.
+- To mine again afterwards, get test SOL first (Get test SOL.bat).
+
+Other buttons
+- Check balance.bat : shows your SUMO, your test SOL and the network stats.
+- Get test SOL.bat  : on public devnet this usually fails; use https://faucet.solana.com instead.
+
+If the colours or pictures look wrong
+- Make the window wider (about 100 columns) to see the frog, or run
+  Mine SUMO.bat from a newer terminal. Plain text mode:  .venv\Scripts\python.exe sumo_miner.py mine --plain
+
+If it says Python isn't installed
+- Install it from https://www.python.org/downloads/ and tick "Add python.exe to PATH",
+  then double-click Mine SUMO.bat again.
+  (If your folder already has the .venv from PyCharm, it just reuses that.)
