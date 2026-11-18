@@ -658,7 +658,7 @@ def check_wallet_account(chain, pk, nothing):
     return acct
 
 
-FIX_SAVED = "Fix it with Set payout address (in the menu or its button; or: py sumo_miner.py set-payout <address>)."
+FIX_SAVED = "Fix it by running Set payout address (or: py sumo_miner.py set-payout <address>)."
 
 
 def saved_payout(settings):
@@ -842,7 +842,7 @@ def cmd_withdraw(args, settings):
         sys.exit(f"!! The network refused it: {e}. Nothing was sent.")
     print(f"\n*** SENT. Transaction {sig}")
     print(f"Destination now has {chain.sol_balance(dest):.6f} test SOL.")
-    print("To mine again on this PC, get test SOL first (Get test SOL).")
+    print("To mine again on this PC, get some test SOL for fees first.")
 
 
 # ======================= hashing workers =======================
@@ -935,8 +935,10 @@ def cmd_mine(args, settings):
         check_wallet_account(chain, payout, "Not mining. " + FIX_SAVED)
     earner = payout or kp.pubkey()
     if chain.sol_balance(kp.pubkey()) < 0.003:
-        sys.exit(f"Your test wallet {kp.pubkey()} needs a little test SOL for fees (about 0.003).\n"
-                 f"Run:  py sumo_miner.py faucet   (or choose Get test SOL in the menu)")
+        how = ("Get free devnet SOL at https://faucet.solana.com (pick Devnet, paste your wallet address), "
+               "then start mining again." if chain.cluster == "devnet" else
+               "Run:  py sumo_miner.py faucet   (or run Get test SOL)")
+        sys.exit(f"Your test wallet {kp.pubkey()} needs a little test SOL for fees (about 0.003).\n{how}")
     workers = args.workers or os.cpu_count() or 1
     scr = Screen(enable_colour(args.plain))
     scr.start(dict(cluster=chain.cluster, fee_wallet=str(kp.pubkey()), workers=workers,
@@ -1156,7 +1158,7 @@ def main():
         _main()
     except KeyboardInterrupt:
         # Ctrl+C anywhere (also during start-up or a network call): a friendly stop, not a traceback.
-        print("\n  Stopped (Ctrl+C). Nothing is lost: just double-click it again to carry on.", flush=True)
+        print("\n  Stopped (Ctrl+C). Nothing is lost. You can start mining again whenever you like.", flush=True)
     except SystemExit:
         raise
     except Exception as e:

@@ -6,6 +6,14 @@ rem Wallet safety first: _start.bat moves an old wallet in, or stops on two wall
 call "%~dp0files\_start.bat"
 if errorlevel 2 goto stopsafe
 if errorlevel 1 goto fail
+rem An older miner folder can still hold the five old buttons: warn once, before the menu.
+set "OLDBTN="
+if exist "%~dp0Mine SUMO.bat" set "OLDBTN=1"
+if exist "%~dp0Check balance.bat" set "OLDBTN=1"
+if exist "%~dp0Get test SOL.bat" set "OLDBTN=1"
+if exist "%~dp0Set payout address.bat" set "OLDBTN=1"
+if exist "%~dp0Withdraw SOL.bat" set "OLDBTN=1"
+if defined OLDBTN goto oldbuttons
 
 :menu
 cls
@@ -42,7 +50,7 @@ echo  Getting free test SOL for fees...
 "%PY%" sumo_miner.py faucet
 :do_mine
 echo.
-echo  >^> MINING... close this window or press Ctrl+C to stop.
+echo  ^>^> MINING... close this window or press Ctrl+C to stop.
 echo  Window too small for the frog? Make it wider, about 100 columns.
 "%PY%" sumo_miner.py mine
 if errorlevel 1 goto action_failed
@@ -76,8 +84,10 @@ echo  Type  none  to keep rewards in the miner's own test wallet.
 echo.
 set "ADDR="
 set /p "ADDR=Address: "
+rem Strip any double quotes, so nothing typed can add extra options. The -- keeps it an address.
+if defined ADDR set "ADDR=%ADDR:"=%"
 if not defined ADDR goto menu
-"%PY%" sumo_miner.py set-payout "%ADDR%"
+"%PY%" sumo_miner.py set-payout -- "%ADDR%"
 goto done
 
 :withdraw
@@ -92,12 +102,13 @@ echo  You will see the amount and the address, and nothing is sent until you typ
 echo.
 set "ADDR="
 set /p "ADDR=Address (Enter = payout address): "
+if defined ADDR set "ADDR=%ADDR:"=%"
 rem No ( ) blocks here: a folder name like "sumo (1)" would break them.
 if defined ADDR goto withdraw_to
 "%PY%" sumo_miner.py withdraw
 goto done
 :withdraw_to
-"%PY%" sumo_miner.py withdraw "%ADDR%"
+"%PY%" sumo_miner.py withdraw -- "%ADDR%"
 goto done
 
 :done
@@ -108,7 +119,7 @@ goto menu
 :action_failed
 echo.
 echo  Something went wrong, see the message above.
-echo  If it says you need test SOL, come back to the menu and choose 3, Get test SOL.
+echo  If it says you need test SOL, get some at https://faucet.solana.com, pick Devnet, then try again.
 pause
 goto menu
 
@@ -124,6 +135,23 @@ echo  Stopped on purpose. No new wallet was made.
 echo  If it says Two wallets found above, do not delete sumo-devnet-key.json. It holds your test SUMO.
 pause
 exit /b 2
+
+:oldbuttons
+cls
+echo.
+echo  !! OLD BUTTONS FOUND next to SUMO Frog.bat.
+echo  Please delete the five old buttons. They are from the older miner and are no longer used:
+echo      Mine SUMO.bat
+echo      Check balance.bat
+echo      Get test SOL.bat
+echo      Set payout address.bat
+echo      Withdraw SOL.bat
+echo  The old Mine SUMO.bat can make a SECOND wallet. Use SUMO Frog.bat only.
+echo  Delete only those five .bat files.
+echo  NEVER delete sumo-devnet-key.json. It is your wallet and it holds your test SUMO.
+echo.
+pause
+goto menu
 
 :bye
 exit /b 0

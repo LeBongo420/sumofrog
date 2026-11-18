@@ -176,6 +176,15 @@ def check_devnet_config(data):
         raise SystemExit("devnet config still has the server placeholder")
 
 
+def check_windows_text(arc, data):
+    """The devnet .bat files and guides are read literally by Windows: plain ASCII, CRLF only.
+    A bare LF breaks batch labels (goto), a non-ASCII byte shows as junk."""
+    if arc.endswith(".bat") or arc.endswith(("START HERE.txt", "HOW TO MINE.txt")):
+        rest = data.replace(b"\r\n", b"")
+        if b"\n" in rest or b"\r" in rest or any(c > 127 for c in data):
+            raise SystemExit(f"{arc} must be plain ASCII with CRLF line endings only")
+
+
 def build_devnet(candidate=False):
     """The tidy devnet zip: START HERE.txt + SUMO Frog.bat on top, everything else in files/."""
     ver = version()
@@ -190,6 +199,7 @@ def build_devnet(candidate=False):
             if "\\" in arc or ".." in parts or len(parts) > 2 or (len(parts) == 2 and parts[0] != DEVNET_FILES_DIR):
                 raise SystemExit(f"refusing unexpected path in devnet zip: {arc}")
             data = git_show(f"miner/{src}")
+            check_windows_text(arc, data)
             if arc == f"{DEVNET_FILES_DIR}/sumo_config.json":
                 check_devnet_config(data)
                 check_payload("sumo_config.devnet.json", data, ips)

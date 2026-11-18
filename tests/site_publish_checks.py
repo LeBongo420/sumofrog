@@ -254,10 +254,16 @@ def main():
     ok("devnet layout: no example config, config + wallet-free",
        "files/sumo_config.json" in [a for a, _ in z.DEVNET_LAYOUT]
        and not any("key" in a.lower() and a.endswith(".json") for a, _ in z.DEVNET_LAYOUT))
-    raw = {arc: open(os.path.join(miner_dir, src), "rb").read() for arc, src in z.DEVNET_LAYOUT
+    repo_root = os.path.join(miner_dir, "..")
+
+    def staged(src):  # the bytes git stores (the index), which is what build_zips packs
+        r = subprocess.run(["git", "show", f":miner/{src}"], cwd=repo_root, capture_output=True)
+        assert r.returncode == 0, src
+        return r.stdout
+    raw = {arc: staged(src) for arc, src in z.DEVNET_LAYOUT
            if arc.endswith((".bat", ".txt")) and not arc.endswith("requirements.txt")}
     ok("every devnet .bat and guide is plain ASCII", all(all(c < 128 for c in d) for d in raw.values()))
-    ok("every devnet .bat and guide uses Windows (CRLF) line endings only",
+    ok("every devnet .bat and guide is stored in git with Windows (CRLF) line endings only (index, not the working copy)",
        all(d.count(b"\r\n") == d.count(b"\n") and d.count(b"\r") == d.count(b"\n") for d in raw.values()))
     launcher = open(os.path.join(miner_dir, "devnet", "SUMO Frog.bat"), encoding="utf-8").read()
     ok("launcher: runs from files/, calls _start.bat first, and stops (code 2) or fails (code 1) before the menu",
@@ -270,6 +276,42 @@ def main():
     ok("launcher menu: 1 Mine SUMO, 2 Check balance, 3 Get test SOL, 4 Set payout address, 5 Withdraw SOL, 6 Exit",
        [" ".join(l.split()[1:]) for l in menu_items] == ["1 Mine SUMO", "2 Check balance", "3 Get test SOL",
                                                        "4 Set payout address", "5 Withdraw SOL", "6 Exit"])
+    order = ["if errorlevel 6 goto bye", "if errorlevel 5 goto withdraw", "if errorlevel 4 goto payout",
+             "if errorlevel 3 goto faucet", "if errorlevel 2 goto balance", "if errorlevel 1 goto mine"]
+    pos = [launcher.find(x) for x in order]
+    ok("launcher menu keys are tested highest first: 6, 5, 4, 3, 2, 1 (the other way round would make every key mine)",
+       all(p >= 0 for p in pos) and pos == sorted(pos))
+    ok("launcher never passes --yes (or -y) to anything: Withdraw and Set payout always ask",
+       not any(tok.lower() in ("--yes", "-y", "/y") for l in lines for tok in l.split()))
+    ok("launcher keeps its Withdraw / Set payout screens that say nothing is sent until you type y",
+       "nothing is sent until you type  y" in launcher)
+    miner_src = open(os.path.join(miner_dir, "sumo_miner.py"), encoding="utf-8").read()
+    wd = miner_src[miner_src.index("def cmd_withdraw"):miner_src.index("def _worker")]
+    ok("sumo_miner.py withdraw still asks 'Send now? [y/N]' unless --yes is given, and the launcher never gives it",
+       'input("Send now? [y/N] ")' in wd and "if not args.yes:" in wd and "--yes" not in launcher)
+    sp = miner_src[miner_src.index("def cmd_set_payout"):miner_src.index("def cmd_withdraw")]
+    ok("sumo_miner.py set-payout still asks to type YES", 'input("Type YES to save it: ")' in sp)
+    for label, call in (("payout", 'sumo_miner.py set-payout -- "%ADDR%"'), ("withdraw", 'sumo_miner.py withdraw -- "%ADDR%"')):
+        sec = launcher[launcher.index("\n:" + label + "\n"):]
+        sec = sec[:sec.index("\n:done\n")] if label == "withdraw" else sec[:sec.index("\n:withdraw\n")]
+        strip = 'set "ADDR=%ADDR:"=%"'
+        ok(f"launcher :{label} strips double quotes from the pasted address before using it",
+           strip in sec and sec.index(strip) < sec.index(call))
+        ok(f"launcher :{label} passes the address after -- so it can never be read as an option", call in sec)
+    ok("launcher warns when any of the five old buttons sits next to it, before the menu",
+       all(f'if exist "%~dp0{n}" set "OLDBTN=1"' in launcher for n in
+           ("Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat", "Set payout address.bat", "Withdraw SOL.bat"))
+       and launcher.index("if defined OLDBTN goto oldbuttons") < launcher.index(":menu"))
+    old_block = launcher[launcher.index("\n:oldbuttons\n"):]
+    old_block = old_block[:old_block.index("\n:bye\n")]
+    ok("old-button warning: says delete the five buttons, never the wallet, and returns to the menu",
+       "Please delete the five old buttons" in old_block and "NEVER delete sumo-devnet-key.json" in old_block
+       and "SECOND wallet" in old_block and "goto menu" in old_block
+       and all(n in old_block for n in ("Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat",
+                                        "Set payout address.bat", "Withdraw SOL.bat")))
+    ok("launcher MINING line escapes both arrows (^>^>)", "echo  ^>^> MINING" in launcher and ">^>" not in launcher.replace("^>^>", ""))
+    ok("launcher no longer sends people to menu option 3 for test SOL (faucet.solana.com is the real route)",
+       "choose 3" not in launcher and "https://faucet.solana.com" in launcher)
     ok("launcher: a single key press picks 1-6; any other key (or Ctrl+C) goes back to the menu, not to mining",
        "choice /c 123456 /n" in launcher and "if errorlevel 6 goto bye" in launcher
        and launcher.index("if errorlevel 1 goto mine") < launcher.index("goto menu", launcher.index("if errorlevel 1 goto mine")))
@@ -290,7 +332,7 @@ def main():
     ok("launcher has no ( ) blocks, so a folder like 'sumo (1)' (a repeat download) can't break it",
        not any(l.endswith("(") or l.startswith(")") or l.lower().startswith(("else", "for ")) for l in lines))
     ok("launcher :withdraw sends an address only when one was typed",
-       "if defined ADDR goto withdraw_to" in launcher and '"%PY%" sumo_miner.py withdraw "%ADDR%"' in launcher)
+       "if defined ADDR goto withdraw_to" in launcher and '"%PY%" sumo_miner.py withdraw -- "%ADDR%"' in launcher)
     ok("launcher never copies, moves or deletes anything",
        not any(w in l.lower().split()[:1] for l in lines for w in ("copy", "move", "del", "erase", "rmdir", "xcopy")))
     mine = launcher[launcher.index("\n:mine\n"):]
@@ -299,6 +341,19 @@ def main():
     ok("launcher: no old per-button .bat files are packed",
        not any(a.endswith(".bat") and a not in ("SUMO Frog.bat", "files/_start.bat", "files/_setup.bat")
                for a, _ in z.DEVNET_LAYOUT))
+    attrs = open(os.path.join(repo_root, ".gitattributes"), encoding="utf-8").read()
+    ok(".gitattributes keeps .bat files and the devnet guides byte-for-byte (no line-ending conversion)",
+       "*.bat -text" in attrs and "miner/devnet/*.txt -text" in attrs)
+    chk = subprocess.run(["git", "check-attr", "text", "--", "miner/devnet/SUMO Frog.bat", "miner/devnet/_start.bat",
+                          "miner/devnet/START HERE.txt", "miner/devnet/HOW TO MINE.txt", "miner/_setup.bat"],
+                         cwd=repo_root, capture_output=True, text=True).stdout.splitlines()
+    ok("git really treats those five files as no-conversion", len(chk) == 5 and all(l.endswith("text: unset") for l in chk))
+    for bad in (b"echo hi\ngoto x\n", b"echo hi\r\ngoto x\n", b"echo hi\r\r\n", "echo caf\u00e9\r\n".encode("utf-8")):
+        ok("build_zips refuses a .bat with a bare LF, a bare CR or a non-ASCII byte",
+           "must be plain ASCII" in refused(z.check_windows_text, "SUMO Frog.bat", bad))
+    z.check_windows_text("SUMO Frog.bat", b"echo hi\r\ngoto x\r\n")
+    z.check_windows_text("files/requirements.txt", b"solders>=0.21\n")
+    ok("build_zips accepts a clean CRLF .bat and leaves requirements.txt alone", True)
     # ---- wallet safety on update (Ribbit's note 1) ----
     start = open(os.path.join(miner_dir, "devnet", "_start.bat"), encoding="utf-8").read()
     lower = start.lower()
@@ -344,9 +399,11 @@ def main():
         ok(f"{guide}: says never delete sumo-devnet-key.json", "NEVER delete sumo-devnet-key.json" in flat)
         ok(f"{guide}: no 'can be deleted' wording anywhere", "can be deleted" not in flat.lower()
            and "may be deleted" not in flat.lower())
-        ok(f"{guide}: tells people to use SUMO Frog.bat and its menu, not the old buttons",
-           "SUMO Frog.bat" in flat and not any(old in flat for old in
-               ("Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat", "Set payout address.bat", "Withdraw SOL.bat")))
+        old_names = ("Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat", "Set payout address.bat", "Withdraw SOL.bat")
+        ok(f"{guide}: tells people to use SUMO Frog.bat and to delete the five old buttons by name (never the wallet)",
+           "SUMO Frog.bat" in flat and "delete the five old buttons" in flat and "SECOND wallet" in flat
+           and all(n in flat for n in old_names)
+           and "never sumo-devnet-key.json" in flat and "Delete only those five .bat files" in flat)
         ok(f"{guide}: never tells people to copy the wallet file",
            "copy sumo-devnet-key" not in flat.lower() and "copy it" not in flat.lower())
         ok(f"{guide}: explains the 'Two wallets found' stop", "Two wallets found" in flat)

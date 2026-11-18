@@ -10,8 +10,12 @@ Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
    files folder by itself the first time you run SUMO Frog.bat. NEVER delete
    sumo-devnet-key.json, wherever it is: it holds your test SUMO. If the miner
    says "Two wallets found", it has stopped on purpose: read what it says and
-   don't delete anything. The old buttons and program files left in the folder
-   are no longer used and can be ignored.)
+   don't delete anything. IMPORTANT: delete the five old buttons next to SUMO
+   Frog.bat: Mine SUMO.bat, Check balance.bat, Get test SOL.bat, Set payout
+   address.bat and Withdraw SOL.bat. The old Mine SUMO.bat can make a SECOND
+   wallet. Delete only those five .bat files, never sumo-devnet-key.json.
+   The other old program files left in the folder are no longer used and can
+   be ignored. SUMO Frog.bat warns you if an old button is still there.)
 
 2. Double-click  SUMO Frog.bat
    If Windows says "Windows protected your PC", click "More info" then

@@ -1,0 +1,6 @@
+# The devnet miner's Windows files must stay CRLF, byte for byte, in git and in the zip.
+# "-text" means git never converts line endings for these files, on any machine or git setting
+# (an eol=crlf rule would store them as LF, and the zip is packed straight from git).
+# tests/site_publish_checks.py and scripts/build_zips.py both refuse a bare LF in them.
+*.bat -text
+miner/devnet/*.txt -text

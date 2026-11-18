@@ -391,4 +391,35 @@ for label, url, expect in (("429", f"http://127.0.0.1:{PORT}", "HTTP 429 Too Man
     ok(f"main(), {label}: no host, port or IP on screen", all(x not in shown for x in ("127.0.0.1", str(PORT), str(DEAD_PORT), "localhost")))
 httpd.shutdown()
 
+# ---- Ribbit 18g Note 1: messages fit every package (devnet menu zip and the private flat zip) ----
+src_text = open(os.path.join(MINER, "sumo_miner.py"), encoding="utf-8").read()
+ok("no message says 'in the menu' or 'choose 3' (the private zip has no menu)", "in the menu" not in src_text
+   and "choose 3" not in src_text and "Get test SOL.bat" not in src_text)
+ok("Ctrl+C text no longer says to double-click it again", "double-click it again" not in src_text
+   and "start mining again whenever you like" in src_text)
+
+
+def low_sol_message(cluster):
+    class LowChain:
+        def __init__(self, settings):
+            self.cluster, self.unencrypted = cluster, False
+            self.program = self.config = self.mint = Keypair().pubkey()
+
+        def sol_balance(self, pk):
+            return 0.0
+
+    old = (m.Chain, m.load_key, m.saved_payout)
+    m.Chain, m.load_key, m.saved_payout = LowChain, (lambda path: Keypair()), (lambda settings: None)
+    try:
+        return refused(m.cmd_mine, types.SimpleNamespace(keypair="k", payout=None, workers=1, blocks=0, plain=True), {})
+    finally:
+        m.Chain, m.load_key, m.saved_payout = old
+
+
+msg = low_sol_message("devnet")
+ok("devnet low-SOL message points to faucet.solana.com", "https://faucet.solana.com" in msg and "menu" not in msg)
+msg = low_sol_message("private Sumo test network")
+ok("private-network low-SOL message names the faucet command, no menu", "py sumo_miner.py faucet" in msg
+   and "menu" not in msg and "faucet.solana.com" not in msg)
+
 print(f"miner console checks: {passed} passed")

@@ -13,8 +13,12 @@ First time on this PC (or updating the old folder)
    If the miner says "Two wallets found" (or that it couldn't move the wallet), it has stopped on
    purpose and made no new wallet. Don't delete anything. Keep the wallet you want in the "files"
    folder and put the other somewhere safe, for example a folder called "old wallet".
-   The old buttons and program files left in the folder (the old .bat files, sumo_miner.py, .venv
-   and so on) are no longer used and can be ignored.
+   IMPORTANT: delete the five old buttons next to SUMO Frog.bat: Mine SUMO.bat, Check balance.bat,
+   Get test SOL.bat, Set payout address.bat and Withdraw SOL.bat. The old Mine SUMO.bat can make a
+   SECOND wallet. Delete only those five .bat files, never sumo-devnet-key.json.
+   SUMO Frog.bat warns you if an old button is still there.
+   The other old program files left in the folder (sumo_miner.py, .venv and so on) are no longer
+   used and can be ignored.
    If you extract somewhere new instead, MOVE sumo-devnet-key.json (cut and paste, do not copy)
    from the old folder into the new "files" folder yourself, so only one wallet file is left.
    The wallet is NOT in the zip.
