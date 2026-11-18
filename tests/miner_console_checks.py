@@ -236,4 +236,92 @@ ok("an unexpected error shows a short friendly message, exit code 1", r.returnco
 ok("no traceback, no file paths, no user name on screen after an error",
    "Traceback" not in shown and "SecretName" not in shown and "File \"" not in shown and secret_dir not in shown)
 
+# ---- Review Low 1: Windows-style paths in every spelling are hidden ----
+m.HERE = r"C:\Users\JoshSmith\Downloads\sumo miner\files"
+WIN_CASES = [
+    r"[Errno 2] No such file or directory: 'C:\\Users\\JoshSmith\\Downloads\\sumo miner\\files\\sumo_config.json'",
+    r"[WinError 5] Access is denied: 'C:\\Users\\JoshSmith\\Downloads\\sumo miner\\files\\sumo-devnet-key.json'",
+    r"C:\Users\JoshSmith\Downloads\sumo miner\files\sumo_config.json not found",
+    r"c:\users\joshsmith\downloads\sumo miner\files\a.json",
+    r"C:\USERS\JOSHSMITH\DOWNLOADS\SUMO MINER\FILES\A.JSON",
+    r"C:/Users/JoshSmith/Downloads/sumo miner/files/a.json",
+    r"[WinError 5] Access is denied: 'C:\\Users\\JOSHSM~1\\Downloads\\other folder\\k.json'",
+    r"opening D:\Users\JOSHSM~1\Desktop\x y\k.json now",
+    r"\\PC-JOSH\share\JoshSmith\k.json",
+    r"/home/joshsmith/Downloads/k.json failed",
+]
+for case in WIN_CASES:
+    out = m.scrub_paths(case)
+    ok(f"scrub_paths hides user name and folders: {case[:48]}...",
+       not any(bad in out.lower() for bad in ("joshsm", "downloads", "users", "pc-josh")))
+ok("scrub_paths leaves web addresses alone",
+   m.scrub_paths("HTTP Error 429 at https://api.devnet.solana.com/x/y") == "HTTP Error 429 at https://api.devnet.solana.com/x/y")
+ok("scrub_paths keeps the file name", "sumo_config.json" in m.scrub_paths(WIN_CASES[0]))
+for exc in (FileNotFoundError(2, "No such file or directory", r"C:\Users\JoshSmith\Downloads\files\sumo_config.json"),
+            PermissionError(13, "Access is denied", r"C:\\Users\\JOSHSM~1\\Downloads\\files\\sumo-devnet-key.json")):
+    text = m.friendly_error(exc)
+    ok("file errors show only the base file name and the reason",
+       ("sumo_config.json" in text or "sumo-devnet-key.json" in text) and "joshsm" not in text.lower()
+       and "Users" not in text and "Downloads" not in text and exc.strerror in text)
+m.HERE = old_here
+
+# ---- Review Low 2: workers leave on their own if the miner is hard-killed ----
+ORPHAN = r'''
+import sys, os
+sys.path.insert(0, %(miner)r)
+import multiprocessing as mp
+import sumo_miner as m
+from solders.keypair import Keypair
+
+class FakeChain:
+    def state(self):
+        return dict(challenge=bytes(32), target=1)   # impossible target: workers never finish
+
+def on_tick(hashes, rate):
+    kids = mp.active_children()
+    if len(kids) >= 2 and not getattr(on_tick, "said", False):
+        on_tick.said = True
+        print("PIDS " + " ".join(str(k.pid) for k in kids), flush=True)
+
+if __name__ == "__main__":
+    mp.set_start_method(%(method)r)
+    m.grind(FakeChain(), Keypair().pubkey(), dict(challenge=bytes(32), target=1), 2, on_tick)
+'''
+
+
+def alive(pid):
+    try:
+        with open(f"/proc/{pid}/stat") as f:
+            return f.read().rsplit(")", 1)[1].split()[0] != "Z"
+    except OSError:
+        return False
+
+
+if os.name != "nt" and os.path.isdir("/proc"):
+    import time
+    script = os.path.join(tempfile.mkdtemp(), "orphan.py")
+    for method in ("fork", "spawn"):
+        with open(script, "w") as f:
+            f.write(ORPHAN % {"miner": MINER, "method": method})
+        p = subprocess.Popen([sys.executable, "-u", script], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        pids = []
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            line = p.stdout.readline()
+            if line.startswith("PIDS"):
+                pids = [int(x) for x in line.split()[1:]]
+                break
+        ok(f"{method}: worker processes started", len(pids) >= 2 and all(alive(x) for x in pids))
+        os.kill(p.pid, signal.SIGKILL)  # hard kill: no cleanup code runs in the miner
+        p.wait()
+        deadline = time.time() + 15
+        while time.time() < deadline and any(alive(x) for x in pids):
+            time.sleep(0.2)
+        left = [x for x in pids if alive(x)]
+        for x in left:
+            os.kill(x, signal.SIGKILL)  # tidy up if the check failed
+        ok(f"{method}: after the miner is hard-killed, its workers exit by themselves", not left)
+else:
+    ok("hard-kill worker check skipped (needs /proc)", True)
+
 print(f"miner console checks: {passed} passed")

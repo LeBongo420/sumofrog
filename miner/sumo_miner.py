@@ -28,6 +28,7 @@ import json
 import multiprocessing as mp
 import os
 import queue
+import re
 import secrets
 import shutil
 import signal
@@ -854,11 +855,16 @@ def _worker(prefix, target, start, wid, nworkers, found, counter, stop):
         signal.signal(signal.SIGINT, signal.SIG_IGN)
     except Exception:
         pass
+    parent = mp.parent_process()
     tb = target.to_bytes(8, "big")
     base = hashlib.sha256(prefix)  # challenge || reward address = exactly one 64-byte block, hashed once
     copy = base.copy
     chunk_id = wid
     while not stop.is_set():
+        # If the miner itself was killed (Task Manager, crash), nobody is left to set `stop`
+        # and this worker ignores Ctrl+C: quit on our own so it can't burn CPU forever.
+        if parent is not None and not parent.is_alive():
+            return
         lo = start + chunk_id * CHUNK
         for n in range(lo, lo + CHUNK):
             h = copy()
@@ -1091,15 +1097,39 @@ def set_window_icon():
         pass
 
 
+# Windows drive paths, however they are written: C:\Users\Me\x, C:\\Users\\Me\\x, C:/Users/Me/x, any
+# capitals, 8.3 short names (JOSHSM~1). Every folder part is dropped and only the last name is kept.
+_DRIVE_PATH = re.compile(r"(?<![A-Za-z0-9])[A-Za-z]:[\\/]+(?:[^\\/'\"\r\n]+[\\/]+)*")
+_UNC_PATH = re.compile(r"(?<![\w:])\\\\+[^\\/'\"\r\n]+[\\/]+(?:[^\\/'\"\r\n]+[\\/]+)*")
+_USERS_PATH = re.compile(r"(?i)(?:[\\/]+)(?:users|home)[\\/]+[^\\/'\"\r\n]+[\\/]+(?:[^\\/'\"\r\n]+[\\/]+)*")
+_POSIX_PATH = re.compile(r"(?<![\w:/.])(?:/[^/'\"\r\n\s]+)+/")
+
+
 def scrub_paths(text):
-    """Hide this computer's folder names (and the user name inside them) from anything printed:
-    the miner's own folder and the user's home folder become 'this folder' and '~'."""
+    """Hide this computer's folder names (and the user name inside them) from anything printed.
+    The miner's own folder and the user's home folder are matched first, ignoring capitals and
+    single/double backslashes or forward slashes; then any other drive, network or home-style
+    path is cut down to just its last name."""
     text = str(text)
     for real, label in ((HERE, "<this folder>"), (os.path.expanduser("~"), "~")):
         if real and len(real) > 3:
-            for variant in {real, real.replace("\\", "/"), real.lower()}:
-                text = text.replace(variant, label)
+            pattern = r"[\\/]+".join(re.escape(part) for part in re.split(r"[\\/]+", real) if part)
+            if real[:1] in "\\/":
+                pattern = r"[\\/]+" + pattern
+            text = re.sub(pattern, label, text, flags=re.I)
+    for rx in (_DRIVE_PATH, _UNC_PATH, _USERS_PATH, _POSIX_PATH):
+        text = rx.sub("", text)
     return text
+
+
+def friendly_error(e):
+    """One short line for an unexpected error. File errors show only the file's own name and the
+    reason (never the folder, so never the Windows user name); anything else is path-scrubbed."""
+    if isinstance(e, OSError) and (e.filename or e.filename2):
+        names = [os.path.basename(str(n).replace("\\", "/").rstrip("/")) or "?" for n in (e.filename, e.filename2) if n]
+        reason = scrub_paths(e.strerror or type(e).__name__)
+        return f"{type(e).__name__}: {reason} ({' -> '.join(names)})"
+    return f"{type(e).__name__}: {scrub_paths(e)}"
 
 
 def main():
@@ -1115,7 +1145,7 @@ def main():
         # Set SUMO_DEBUG=1 to see the full traceback when reporting a bug.
         if os.environ.get("SUMO_DEBUG"):
             raise
-        print(f"\n  Something went wrong: {type(e).__name__}: {scrub_paths(e)}\n"
+        print(f"\n  Something went wrong: {friendly_error(e)}\n"
               "  If it keeps happening, tell the person who sent you the miner what this message says.",
               file=sys.stderr, flush=True)
         sys.exit(1)

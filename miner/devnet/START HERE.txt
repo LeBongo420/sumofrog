@@ -6,9 +6,12 @@ Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
 
 1. Right-click the zip, choose "Extract All...", then click Extract.
    (Updating the older flat version? Extract into the SAME folder and choose
-   "Replace the files". Your wallet moves into the new files folder by itself
-   the first time you run Mine SUMO.bat. The old loose files left in the folder
-   are no longer used and can be deleted.)
+   "Replace the files". Your wallet, sumo-devnet-key.json, moves into the new
+   files folder by itself the first time you run Mine SUMO.bat. NEVER delete
+   sumo-devnet-key.json, wherever it is: it holds your test SUMO. If the miner
+   says "Two wallets found", it has stopped on purpose: read what it says and
+   don't delete anything. The old program files left in the folder are no longer
+   used and can be ignored.)
 
 2. Double-click  Mine SUMO.bat
    If Windows says "Windows protected your PC", click "More info" then

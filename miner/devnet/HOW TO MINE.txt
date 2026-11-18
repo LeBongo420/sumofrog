@@ -8,10 +8,15 @@ First time on this PC (or updating the old folder)
    with everything else.
 3. Updating from the older flat version? Extract into the SAME folder and say "Replace the files".
    Your wallet file sumo-devnet-key.json (and payout-address.txt, if you set one) moves into the
-   "files" folder by itself the first time you run a button. The old loose files left behind
-   (sumo_miner.py, .venv and so on) are no longer used and can be deleted.
+   "files" folder by itself the first time you run a button.
+   NEVER delete sumo-devnet-key.json, wherever you find it: it holds your test SUMO.
+   If the miner says "Two wallets found" (or that it couldn't move the wallet), it has stopped on
+   purpose and made no new wallet. Don't delete anything. Keep the wallet you want in the "files"
+   folder and put the other somewhere safe, for example a folder called "old wallet".
+   The old program files left next to the buttons (sumo_miner.py, .venv and so on) are no longer
+   used and can be ignored.
    If you extract somewhere new instead, copy sumo-devnet-key.json into the "files" folder yourself.
-   The wallet is NOT in the zip. Never delete it: it holds your test SUMO.
+   The wallet is NOT in the zip.
 4. This zip is already set to the public Solana devnet (files\sumo_config.json is included).
    There is nothing to edit. You need Python 3 installed (python.org, tick "Add python.exe to PATH").
 5. Open that folder and double-click  Mine SUMO.bat

@@ -262,6 +262,30 @@ def main():
                'cd /d "%~dp0files"' in text and "files\\_start.bat" in text and "%~dp0_setup" not in text)
     mine = open(os.path.join(miner_dir, "devnet", "Mine SUMO.bat"), encoding="utf-8").read()
     ok("Mine SUMO.bat looks for the wallet inside files/", "%~dp0files\\sumo-devnet-key.json" in mine)
+    # ---- wallet safety on update (Ribbit's note 1) ----
+    start = open(os.path.join(miner_dir, "devnet", "_start.bat"), encoding="utf-8").read()
+    lower = start.lower()
+    ok("_start.bat warns 'two wallets found' and tells people not to delete the wallet",
+       "TWO WALLETS FOUND" in start and "DON'T DELETE sumo-devnet-key.json" in start)
+    ok("_start.bat stops with exit code 2 when a wallet is still next to the buttons",
+       ":two_wallets" in start and "exit /b 2" in start
+       and 'if exist "%~dp0..\\sumo-devnet-key.json" goto two_wallets' in start)
+    ok("_start.bat never copies or deletes a wallet: only moves, only if the target is missing",
+       "copy " not in lower and "del " not in lower and "erase" not in lower and "rmdir" not in lower
+       and start.count("if not exist") >= 2)
+    ok("_start.bat says no new wallet was made", "No new wallet has been made" in start)
+    ok("Mine SUMO.bat stops safely on the two-wallet case and never makes a wallet then",
+       "if errorlevel 2 goto stopsafe" in mine and ":stopsafe" in mine
+       and mine.index("goto stopsafe") < mine.index("new-key")
+       and 'if exist "%~dp0sumo-devnet-key.json" goto stopsafe' in mine
+       and mine.index('if exist "%~dp0sumo-devnet-key.json" goto stopsafe') < mine.index("new-key"))
+    for guide in ("START HERE.txt", "HOW TO MINE.txt"):
+        text = open(os.path.join(miner_dir, "devnet", guide), encoding="utf-8").read()
+        flat = " ".join(text.split())
+        ok(f"{guide}: says never delete sumo-devnet-key.json", "NEVER delete sumo-devnet-key.json" in flat)
+        ok(f"{guide}: no 'can be deleted' wording anywhere", "can be deleted" not in flat.lower()
+           and "may be deleted" not in flat.lower())
+        ok(f"{guide}: explains the 'Two wallets found' stop", "Two wallets found" in flat)
     print(f"site publish checks: {passed} passed")
 
 
