@@ -243,6 +243,25 @@ def main():
        and not os.path.exists(os.path.join(swap_root, "site.old", "site"))
        and not os.path.exists(os.path.join(swap_root, "site", "site")))
 
+    # ---- tidy devnet zip layout: only the buttons + START HERE on top, the rest in files/ ----
+    miner_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "miner")
+    top = [a for a, _ in z.DEVNET_TOP]
+    ok("devnet top level is START HERE + the five buttons",
+       sorted(top) == sorted(["START HERE.txt", "Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat",
+                              "Set payout address.bat", "Withdraw SOL.bat"]))
+    ok("devnet layout: one folder deep, only files/",
+       all(a.count("/") <= 1 and (a.count("/") == 0 or a.startswith("files/")) for a, _ in z.DEVNET_LAYOUT))
+    ok("devnet layout: every source exists", all(os.path.isfile(os.path.join(miner_dir, src)) for _, src in z.DEVNET_LAYOUT))
+    ok("devnet layout: no example config, config + wallet-free",
+       "files/sumo_config.json" in [a for a, _ in z.DEVNET_LAYOUT]
+       and not any("key" in a.lower() and a.endswith(".json") for a, _ in z.DEVNET_LAYOUT))
+    for arc, src in z.DEVNET_TOP:
+        if arc.endswith(".bat"):
+            text = open(os.path.join(miner_dir, src), encoding="utf-8").read()
+            ok(f"{arc}: works inside files/ and never runs from the top folder",
+               'cd /d "%~dp0files"' in text and "files\\_start.bat" in text and "%~dp0_setup" not in text)
+    mine = open(os.path.join(miner_dir, "devnet", "Mine SUMO.bat"), encoding="utf-8").read()
+    ok("Mine SUMO.bat looks for the wallet inside files/", "%~dp0files\\sumo-devnet-key.json" in mine)
     print(f"site publish checks: {passed} passed")
 
 

@@ -3,12 +3,16 @@ SUMO FROG MINER for Windows  (test coins on Solana devnet: no real money)
 
 First time on this PC (or updating the old folder)
 1. Close any miner window that's still running.
-2. Right-click the zip and choose "Extract All...".
-3. Pick a folder to keep it in (for example your Downloads folder), or your
-   existing miner folder if you're updating, and say "Replace the files" if Windows asks.
-   Your wallet file sumo-devnet-key.json is NOT in the zip, so it stays as it is.
-   Never delete it: it holds your test SUMO.
-4. This zip is already set to the public Solana devnet (sumo_config.json is included).
+2. Right-click the zip and choose "Extract All...", then click Extract. This makes a folder
+   with the buttons (the .bat files) and START HERE.txt on top, and a "files" folder
+   with everything else.
+3. Updating from the older flat version? Extract into the SAME folder and say "Replace the files".
+   Your wallet file sumo-devnet-key.json (and payout-address.txt, if you set one) moves into the
+   "files" folder by itself the first time you run a button. The old loose files left behind
+   (sumo_miner.py, .venv and so on) are no longer used and can be deleted.
+   If you extract somewhere new instead, copy sumo-devnet-key.json into the "files" folder yourself.
+   The wallet is NOT in the zip. Never delete it: it holds your test SUMO.
+4. This zip is already set to the public Solana devnet (files\sumo_config.json is included).
    There is nothing to edit. You need Python 3 installed (python.org, tick "Add python.exe to PATH").
 5. Open that folder and double-click  Mine SUMO.bat
    The first run makes a test wallet and shows its address, then says it needs test SOL.
@@ -58,9 +62,9 @@ Other buttons
 
 If the colours or pictures look wrong
 - Make the window wider (about 100 columns) to see the frog, or run
-  Mine SUMO.bat from a newer terminal. Plain text mode:  .venv\Scripts\python.exe sumo_miner.py mine --plain
+  Mine SUMO.bat from a newer terminal. Plain text mode:  open a Command Prompt in the "files" folder and run  .venv\Scripts\python.exe sumo_miner.py mine --plain
 
 If it says Python isn't installed
 - Install it from https://www.python.org/downloads/ and tick "Add python.exe to PATH",
   then double-click Mine SUMO.bat again.
-  (If your folder already has the .venv from PyCharm, it just reuses that.)
+  (If the "files" folder already has a .venv from PyCharm, it just reuses that.)

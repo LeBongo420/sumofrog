@@ -57,6 +57,7 @@ if [ ! -f miner/sumo_config.json ]; then
   echo "note: no miner/sumo_config.json; using the example config in a temp folder"
 fi
 python3 tests/miner_checks.py | grep -v '^Address:'
+python3 tests/miner_console_checks.py
 
 echo "== gateway path checks (offline)"
 python3 tests/gateway_checks.py

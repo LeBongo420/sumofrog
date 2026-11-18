@@ -4,7 +4,11 @@ SUMO FROG MINER (devnet) — START HERE  (test coins only, no real money)
 You need Python 3 installed first (free): https://www.python.org/downloads/
 Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
 
-1. Right-click the zip, choose "Extract All...", pick a folder.
+1. Right-click the zip, choose "Extract All...", then click Extract.
+   (Updating the older flat version? Extract into the SAME folder and choose
+   "Replace the files". Your wallet moves into the new files folder by itself
+   the first time you run Mine SUMO.bat. The old loose files left in the folder
+   are no longer used and can be deleted.)
 
 2. Double-click  Mine SUMO.bat
    If Windows says "Windows protected your PC", click "More info" then
@@ -21,4 +25,5 @@ Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
 
 This zip is already set to the public Solana devnet. No settings to edit.
 Never put a real wallet, seed phrase or private key anywhere.
-Full steps, payout address and withdraw: see HOW TO MINE.txt
+Full steps, payout address and withdraw: open the files folder, then HOW TO MINE.txt.
+Everything the miner needs lives in the files folder. Please leave it alone.

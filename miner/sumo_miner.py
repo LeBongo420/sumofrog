@@ -30,6 +30,7 @@ import os
 import queue
 import secrets
 import shutil
+import signal
 import struct
 import sys
 import time
@@ -44,7 +45,7 @@ from solders.pubkey import Pubkey
 from solders.transaction import Transaction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v0.6"
+VERSION = "v0.6.1"
 DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
 MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"
 TOKEN_PROGRAM = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
@@ -94,6 +95,88 @@ def enable_colour(force_plain=False):
     elif os.environ.get("TERM") == "dumb":
         return False
     return True
+
+
+# ======================= console input guard (Windows) =======================
+# Why: a Windows console starts in "QuickEdit" mode with echo, line input and mouse input on.
+# Clicking or typing in the mining window can then freeze the console (output blocks until you
+# press a key or Enter), and the miner's draw loop sits inside that blocked write, so it stops
+# collecting a found block and stops watching for a new challenge. Typed keys also pile up in the
+# console's input buffer and get replayed into the .bat file's "pause" afterwards.
+# Fix: while mining, switch QuickEdit, mouse, echo and line input OFF (Ctrl+C stays on), and keep
+# throwing away any keys pressed. The old console mode is put back on exit. Plain ctypes, no extras.
+_ENABLE_PROCESSED_INPUT = 0x0001   # keeps Ctrl+C working
+_ENABLE_EXTENDED_FLAGS = 0x0080    # needed so that leaving QuickEdit (0x0040) out really turns it off
+_STD_INPUT_HANDLE = -10
+_input_guard = {"k32": None, "handle": None}
+
+
+def _kernel32():
+    import ctypes
+    from ctypes import wintypes
+    k32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    k32.GetStdHandle.argtypes = [wintypes.DWORD]
+    k32.GetStdHandle.restype = wintypes.HANDLE
+    k32.GetConsoleMode.argtypes = [wintypes.HANDLE, ctypes.POINTER(wintypes.DWORD)]
+    k32.GetConsoleMode.restype = wintypes.BOOL
+    k32.SetConsoleMode.argtypes = [wintypes.HANDLE, wintypes.DWORD]
+    k32.SetConsoleMode.restype = wintypes.BOOL
+    k32.FlushConsoleInputBuffer.argtypes = [wintypes.HANDLE]
+    k32.FlushConsoleInputBuffer.restype = wintypes.BOOL
+    return k32
+
+
+def flush_console_input():
+    """Throw away any keys or mouse clicks waiting in the console's input buffer. Does nothing
+    unless quiet_console_input() is active (so never on other systems or when stdin isn't a console)."""
+    k32, handle = _input_guard["k32"], _input_guard["handle"]
+    if k32 is None:
+        return
+    try:
+        k32.FlushConsoleInputBuffer(handle)
+    except Exception:
+        pass
+
+
+class quiet_console_input:
+    """Context manager: stdin is a real Windows console -> QuickEdit, mouse, echo and line input off
+    (Ctrl+C still works), keys discarded; the old mode is restored on exit. Anywhere else it does
+    nothing. `k32` lets the offline checks pass in a fake kernel32."""
+
+    def __init__(self, k32=None):
+        self._k32 = k32
+        self._old = None
+
+    def __enter__(self):
+        import ctypes
+        try:
+            k32 = self._k32 or (_kernel32() if os.name == "nt" else None)
+            if k32 is None:
+                return self
+            handle = k32.GetStdHandle(_STD_INPUT_HANDLE)
+            mode = ctypes.c_uint32()
+            if not handle or not k32.GetConsoleMode(handle, ctypes.byref(mode)):
+                return self  # stdin is a pipe or file, not a console
+            if not k32.SetConsoleMode(handle, _ENABLE_PROCESSED_INPUT | _ENABLE_EXTENDED_FLAGS):
+                return self
+            self._old = mode.value
+            _input_guard.update(k32=k32, handle=handle)
+            flush_console_input()
+        except Exception:
+            self._old = None
+            _input_guard.update(k32=None, handle=None)
+        return self
+
+    def __exit__(self, *exc):
+        if self._old is not None:
+            k32, handle = _input_guard["k32"], _input_guard["handle"]
+            try:
+                flush_console_input()  # so keys pressed while mining don't leak into "pause"
+                k32.SetConsoleMode(handle, self._old)
+            except Exception:
+                pass
+        _input_guard.update(k32=None, handle=None)
+        return False
 
 
 try:
@@ -765,6 +848,12 @@ CHUNK = 50_000
 
 
 def _worker(prefix, target, start, wid, nworkers, found, counter, stop):
+    # Ctrl+C reaches every process on the console. Workers ignore it (the parent sets `stop` and
+    # shuts them down), so they never print their own KeyboardInterrupt traceback over the screen.
+    try:
+        signal.signal(signal.SIGINT, signal.SIG_IGN)
+    except Exception:
+        pass
     tb = target.to_bytes(8, "big")
     base = hashlib.sha256(prefix)  # challenge || reward address = exactly one 64-byte block, hashed once
     copy = base.copy
@@ -868,6 +957,7 @@ def cmd_mine(args, settings):
                        reward_won="")
 
             def tick(hashes, rate):
+                flush_console_input()
                 hud.update(guesses=hashes, rate=rate_text(rate))
                 scr.draw(hud)
 
@@ -948,7 +1038,7 @@ def cmd_faucet(args, settings):
 
 def cmd_new_key(args, settings):
     if os.path.exists(args.keypair):
-        sys.exit(f"{args.keypair} already exists, not overwriting it.")
+        sys.exit(f"{os.path.basename(args.keypair)} already exists in this folder, not overwriting it.")
     kp = Keypair()
     # Owner-only (600) from the start, so other accounts on a shared Mac or Linux machine can't
     # read it. On Windows this just makes a normal file.
@@ -965,7 +1055,7 @@ def cmd_new_key(args, settings):
 
 def load_key(path):
     if not os.path.exists(path):
-        sys.exit(f"No wallet file at {path}. Run: py sumo_miner.py new-key")
+        sys.exit(f"No wallet file ({os.path.basename(path)}) in this folder yet. Run: py sumo_miner.py new-key")
     with open(path) as f:
         return Keypair.from_bytes(bytes(json.load(f)))
 
@@ -1001,7 +1091,37 @@ def set_window_icon():
         pass
 
 
+def scrub_paths(text):
+    """Hide this computer's folder names (and the user name inside them) from anything printed:
+    the miner's own folder and the user's home folder become 'this folder' and '~'."""
+    text = str(text)
+    for real, label in ((HERE, "<this folder>"), (os.path.expanduser("~"), "~")):
+        if real and len(real) > 3:
+            for variant in {real, real.replace("\\", "/"), real.lower()}:
+                text = text.replace(variant, label)
+    return text
+
+
 def main():
+    try:
+        _main()
+    except KeyboardInterrupt:
+        # Ctrl+C anywhere (also during start-up or a network call): a friendly stop, not a traceback.
+        print("\n  Stopped (Ctrl+C). Nothing is lost: just double-click it again to carry on.", flush=True)
+    except SystemExit:
+        raise
+    except Exception as e:
+        # No Python traceback on screen: it would show full file paths (and the Windows user name).
+        # Set SUMO_DEBUG=1 to see the full traceback when reporting a bug.
+        if os.environ.get("SUMO_DEBUG"):
+            raise
+        print(f"\n  Something went wrong: {type(e).__name__}: {scrub_paths(e)}\n"
+              "  If it keeps happening, tell the person who sent you the miner what this message says.",
+              file=sys.stderr, flush=True)
+        sys.exit(1)
+
+
+def _main():
     set_window_icon()
     settings = load_settings()
     ap = argparse.ArgumentParser(description="Sumo Frog miner (test networks only, worthless test coins)")
@@ -1020,9 +1140,13 @@ def main():
     args = ap.parse_args()
     if args.rpc:
         settings["rpc"] = args.rpc
-    {"mine": cmd_mine, "status": cmd_status, "balance": cmd_balance, "new-key": cmd_new_key,
-     "faucet": cmd_faucet, "set-payout": cmd_set_payout,
-     "withdraw": cmd_withdraw}[args.command](args, settings)
+    run = {"mine": cmd_mine, "status": cmd_status, "balance": cmd_balance, "new-key": cmd_new_key,
+           "faucet": cmd_faucet, "set-payout": cmd_set_payout, "withdraw": cmd_withdraw}[args.command]
+    if args.command == "mine":
+        with quiet_console_input():
+            run(args, settings)
+    else:
+        run(args, settings)
 
 
 if __name__ == "__main__":
