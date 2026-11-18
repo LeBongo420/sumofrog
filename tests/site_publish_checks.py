@@ -20,6 +20,35 @@ def ok(name, cond):
     passed += 1
 
 
+FILE_COMMANDS = {"del", "erase", "rd", "rmdir", "move", "copy", "xcopy", "robocopy", "ren", "rename"}
+START_MOVES = (
+    'if exist "%~dp0..\\sumo-devnet-key.json" move "%~dp0..\\sumo-devnet-key.json" "%~dp0" >nul 2>nul',
+    'if exist "%~dp0..\\payout-address.txt" move "%~dp0..\\payout-address.txt" "%~dp0" >nul 2>nul',
+)
+
+
+def file_commands(text, allowed=()):
+    """Return the lines that use a delete / move / copy / rename command anywhere on them.
+    Each line is split at & | && || (not when escaped with ^). A segment starting with echo or rem is text and
+    is skipped; every other segment (also after if / else and inside ( ) ) is checked word by word, ignoring case.
+    A line is only let through if it matches one of the exact `allowed` lines."""
+    import re
+    bad = []
+    for raw in text.replace("\r\n", "\n").split("\n"):
+        line = raw.strip()
+        if not line or line.startswith("::") or line in allowed:
+            continue
+        for seg in re.split(r"(?<!\^)[&|]", line):
+            seg = seg.strip().lstrip("@(").strip()
+            if re.match(r"(?i)(echo|rem)(?![A-Za-z0-9_])", seg):
+                continue
+            words = set(re.findall(r"[A-Za-z0-9_]+", seg.lower()))
+            if words & FILE_COMMANDS:
+                bad.append(raw)
+                break
+    return bad
+
+
 def refused(fn, *a, **kw):
     try:
         fn(*a, **kw)
@@ -301,9 +330,9 @@ def main():
        len(parsers) >= 1 and all(any(k.arg == "allow_abbrev" and getattr(k.value, "value", None) is False
                                      for k in n.keywords) for n in parsers))
     ok("launcher also warns about an old HOW TO MINE.txt next to it, and says to delete it",
-       'if exist "%~dp0HOW TO MINE.txt" set "OLDBTN=1"' in launcher
-       and launcher.index('if exist "%~dp0HOW TO MINE.txt" set "OLDBTN=1"') < launcher.index("if defined OLDBTN goto oldbuttons")
-       and "OLD guide. Delete it too" in launcher and "The current guide is in the files folder" in launcher)
+       'if exist "%~dp0HOW TO MINE.txt" set "OLDGUIDE=1"' in launcher
+       and launcher.index('if exist "%~dp0HOW TO MINE.txt" set "OLDGUIDE=1"') < launcher.index("if defined OLDGUIDE goto oldfiles") < launcher.index(":menu")
+       and "is the OLD guide. Please delete it" in launcher and "The current guide is in the files folder" in launcher)
     sp = miner_src[miner_src.index("def cmd_set_payout"):miner_src.index("def cmd_withdraw")]
     ok("sumo_miner.py set-payout still asks to type YES", 'input("Type YES to save it: ")' in sp)
     for label, call in (("payout", 'sumo_miner.py set-payout -- "%ADDR%"'), ("withdraw", 'sumo_miner.py withdraw -- "%ADDR%"')):
@@ -316,14 +345,24 @@ def main():
     ok("launcher warns when any of the five old buttons sits next to it, before the menu",
        all(f'if exist "%~dp0{n}" set "OLDBTN=1"' in launcher for n in
            ("Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat", "Set payout address.bat", "Withdraw SOL.bat"))
-       and launcher.index("if defined OLDBTN goto oldbuttons") < launcher.index(":menu"))
-    old_block = launcher[launcher.index("\n:oldbuttons\n"):]
+       and launcher.index("if defined OLDBTN goto oldfiles") < launcher.index(":menu"))
+    old_block = launcher[launcher.index("\n:oldfiles\n"):]
     old_block = old_block[:old_block.index("\n:bye\n")]
     ok("old-button warning: says delete the five buttons, never the wallet, and returns to the menu",
        "Please delete the five old buttons" in old_block and "NEVER delete sumo-devnet-key.json" in old_block
        and "SECOND wallet" in old_block and "goto menu" in old_block
        and all(n in old_block for n in ("Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat",
                                         "Set payout address.bat", "Withdraw SOL.bat")))
+    def block_of(label):
+        text = old_block[old_block.index("\n:" + label + "\n"):]
+        return text[:text.index("\ngoto ")]
+    ok("old-file warning wording fits what was found: the buttons text is reached only when an old button is there, the guide text only when the old guide is, and the 'five old buttons' text is not in the shared part",
+       "if defined OLDBTN goto old_buttons_text" in old_block and "if defined OLDGUIDE goto old_guide_text" in old_block
+       and "five old buttons" in block_of("old_buttons_text") and "five old buttons" not in block_of("old_guide_text")
+       and "OLD guide" in block_of("old_guide_text") and "OLD guide" not in block_of("old_buttons_text")
+       and "five old buttons" not in old_block[:old_block.index("\n:old_buttons_text\n")]
+       and "five old buttons" not in old_block[old_block.index("\n:old_guide_text\n"):]
+       and old_block.index("\n:old_tail\n") < old_block.index("NEVER delete sumo-devnet-key.json") < old_block.index("\n:old_buttons_text\n"))
     ok("launcher MINING line escapes both arrows (^>^>)", "echo  ^>^> MINING" in launcher and ">^>" not in launcher.replace("^>^>", ""))
     ok("launcher no longer sends people to menu option 3 for test SOL (faucet.solana.com is the real route)",
        "choose 3" not in launcher and "https://faucet.solana.com" in launcher)
@@ -348,8 +387,33 @@ def main():
        not any(l.endswith("(") or l.startswith(")") or l.lower().startswith(("else", "for ")) for l in lines))
     ok("launcher :withdraw sends an address only when one was typed",
        "if defined ADDR goto withdraw_to" in launcher and '"%PY%" sumo_miner.py withdraw -- "%ADDR%"' in launcher)
-    ok("launcher never copies, moves or deletes anything",
-       not any(w in l.lower().split()[:1] for l in lines for w in ("copy", "move", "del", "erase", "rmdir", "xcopy")))
+    # Every word of every command, also after if / else / & / && || and ( ), not only the first word.
+    ok("launcher never copies, moves, renames or deletes anything (every word of every non-echo, non-rem line)",
+       file_commands(launcher) == [])
+    ok("_start.bat's only file commands are its two exact 'move' lines (wallet and payout file)",
+       file_commands(open(os.path.join(miner_dir, "devnet", "_start.bat"), encoding="utf-8").read(), allowed=START_MOVES) == [])
+    good = launcher.replace("\r\n", "\n")
+    for label, bad in (
+            ("if exist ... del", 'if exist "%~dp0HOW TO MINE.txt" del "%~dp0HOW TO MINE.txt"'),
+            ("& move", 'echo hi & move "%~dp0a" "%~dp0b"'),
+            ("(ren ...)", 'if exist "%~dp0a" (ren "%~dp0a" b)'),
+            ("|| copy", '"%PY%" sumo_miner.py mine || copy "%~dp0a" "%~dp0b"'),
+            ("&& erase", 'cd .. && erase /q x'),
+            ("else rd", 'if exist x (echo y) else rd /s /q x'),
+            ("DEL upper case", 'DEL x'), ("Robocopy", 'Robocopy a b'), ("xcopy", '@xcopy a b'),
+            ("rename", 'rename a b'), ("rmdir", 'rmdir /s x'), ("del/q", 'del/q x'),
+            ("echo then del", 'echo done & del x')):
+        ok(f"launcher file-command check catches: {label}", file_commands(good + "\n" + bad + "\n") != [])
+    for label, fine in (("echo text", "echo  Please delete the five old buttons (copy nothing)"), ("rem text", "rem do not move or del anything"),
+                        ("@echo off", "@echo off"), ("escaped & in echo", "echo a ^& del b")):
+        ok(f"launcher file-command check allows: {label}", file_commands(good + "\n" + fine + "\n") == [])
+    start_src = open(os.path.join(miner_dir, "devnet", "_start.bat"), encoding="utf-8").read().replace("\r\n", "\n")
+    ok("_start.bat check: a third move, a changed move line or a copy is caught; the two real moves are not",
+       file_commands(start_src, allowed=START_MOVES) == []
+       and file_commands(start_src + 'move "%~dp0x" "%~dp0y"\n', allowed=START_MOVES) != []
+       and file_commands(start_src.replace(">nul 2>nul", "& del x", 1), allowed=START_MOVES) != []
+       and file_commands(start_src + "copy a b\n", allowed=START_MOVES) != []
+       and file_commands(start_src.replace('move "%~dp0..\\payout-address.txt"', 'move /y "%~dp0..\\payout-address.txt"'), allowed=START_MOVES) != [])
     mine = launcher[launcher.index("\n:mine\n"):]
     mine = mine[:mine.index("\n:balance\n")]
     ok("launcher :mine looks for the wallet inside files/ first", mine.index("%~dp0files\\sumo-devnet-key.json") < mine.index("new-key"))

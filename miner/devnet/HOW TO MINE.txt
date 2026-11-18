@@ -18,7 +18,7 @@ First time on this PC (or updating the old folder)
    SECOND wallet. Also delete the OLD HOW TO MINE.txt if it sits next to SUMO Frog.bat (this guide, in the
    "files" folder, is the current guide). Delete only those five .bat files and that old guide, never
    sumo-devnet-key.json.
-   SUMO Frog.bat warns you if an old button is still there.
+   SUMO Frog.bat warns you if an old button or the old guide is still there.
    The other old program files left in the folder (sumo_miner.py, .venv and so on) are no longer
    used and can be ignored.
    If you extract somewhere new instead, MOVE sumo-devnet-key.json (cut and paste, do not copy)

@@ -8,13 +8,15 @@ if errorlevel 2 goto stopsafe
 if errorlevel 1 goto fail
 rem An older miner folder can still hold the five old buttons and the old guide: warn once, before the menu.
 set "OLDBTN="
+set "OLDGUIDE="
 if exist "%~dp0Mine SUMO.bat" set "OLDBTN=1"
 if exist "%~dp0Check balance.bat" set "OLDBTN=1"
 if exist "%~dp0Get test SOL.bat" set "OLDBTN=1"
 if exist "%~dp0Set payout address.bat" set "OLDBTN=1"
 if exist "%~dp0Withdraw SOL.bat" set "OLDBTN=1"
-if exist "%~dp0HOW TO MINE.txt" set "OLDBTN=1"
-if defined OLDBTN goto oldbuttons
+if exist "%~dp0HOW TO MINE.txt" set "OLDGUIDE=1"
+if defined OLDBTN goto oldfiles
+if defined OLDGUIDE goto oldfiles
 
 :menu
 cls
@@ -137,24 +139,33 @@ echo  If it says Two wallets found above, do not delete sumo-devnet-key.json. It
 pause
 exit /b 2
 
-:oldbuttons
+:oldfiles
 cls
 echo.
-echo  !! OLD FILES FOUND next to SUMO Frog.bat.
-echo  Please delete the five old buttons. They are from the older miner and are no longer used:
+echo  !! OLD FILES FOUND next to SUMO Frog.bat. They are from the older miner and are no longer used.
+if defined OLDBTN goto old_buttons_text
+:old_after_buttons
+if defined OLDGUIDE goto old_guide_text
+:old_tail
+echo.
+echo  NEVER delete sumo-devnet-key.json. It is your wallet and it holds your test SUMO.
+echo.
+pause
+goto menu
+:old_buttons_text
+echo  Please delete the five old buttons:
 echo      Mine SUMO.bat
 echo      Check balance.bat
 echo      Get test SOL.bat
 echo      Set payout address.bat
 echo      Withdraw SOL.bat
 echo  The old Mine SUMO.bat can make a SECOND wallet. Use SUMO Frog.bat only.
-echo  If HOW TO MINE.txt sits next to SUMO Frog.bat, that is the OLD guide. Delete it too.
-echo  The current guide is in the files folder.
-echo  Delete only those five .bat files and that old HOW TO MINE.txt.
-echo  NEVER delete sumo-devnet-key.json. It is your wallet and it holds your test SUMO.
-echo.
-pause
-goto menu
+echo  Delete only those five .bat files.
+goto old_after_buttons
+:old_guide_text
+echo  HOW TO MINE.txt next to SUMO Frog.bat is the OLD guide. Please delete it.
+echo  The current guide is in the files folder. Delete only that old HOW TO MINE.txt.
+goto old_tail
 
 :bye
 exit /b 0

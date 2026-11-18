@@ -17,7 +17,8 @@ Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
    Frog.bat (the current guide is in the files folder). Delete only those five
    .bat files and that old guide, never sumo-devnet-key.json.
    The other old program files left in the folder are no longer used and can
-   be ignored. SUMO Frog.bat warns you if an old button is still there.)
+   be ignored. SUMO Frog.bat warns you if an old button or the old guide is
+   still there.)
 
 2. Double-click  SUMO Frog.bat
    If Windows says "Windows protected your PC", click "More info" then
