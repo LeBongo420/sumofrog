@@ -51,6 +51,7 @@ DEVNET_INNER = [
     ("_setup.bat", "_setup.bat"),
     ("sumo_miner.py", "sumo_miner.py"),
     ("sumo_art.py", "sumo_art.py"),
+    ("sumo_menu.py", "sumo_menu.py"),
     ("sumo_config.json", "devnet/sumo_config.devnet.json"),
     ("sumo.ico", "sumo.ico"),
     ("sumo_coin.ico", "sumo_coin.ico"),

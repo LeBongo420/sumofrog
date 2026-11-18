@@ -34,6 +34,7 @@ import shutil
 import signal
 import struct
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -1016,6 +1017,118 @@ def cmd_status(args, settings):
     print(f"Last block        {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(st['last_solve_ts']))} by {st['last_miner']}")
 
 
+# ======================= picture menu (Pixy's design) =======================
+# The launcher calls `sumo_miner.py menu` before it asks for a key. It draws an 80 x 30 colour screen, or
+# exits 1 having printed nothing, and then the launcher shows its plain menu. It only ever reads the PUBLIC
+# half of the wallet file and makes at most one short balance request, so it cannot print a secret or hang.
+MENU_RPC_TIMEOUT = 2.5      # seconds for the one balance request; the whole wait is capped a little above
+
+
+def read_public_key(path):
+    """("none", None) no wallet file, ("bad", None) unreadable, ("ok", Pubkey). A wallet file is the secret
+    key (32 bytes) followed by the public key (32 bytes): only the last 32 bytes are used here."""
+    if not os.path.isfile(path):
+        return "none", None
+    try:
+        with open(path) as f:
+            data = json.load(f)
+        if not (isinstance(data, list) and len(data) == 64
+                and all(type(x) is int and 0 <= x < 256 for x in data)):
+            return "bad", None
+        pub = Pubkey.from_bytes(bytes(data[32:]))
+        return "ok", pub
+    except Exception:
+        return "bad", None
+
+
+def menu_rpc_allowed(settings):
+    """Only this computer, the shipped private link or the devnet link from the config."""
+    url = settings.get("rpc") or ""
+    if url_scheme(url) not in ("http", "https"):
+        return False
+    return is_local_url(url) or url in (settings.get("devnet_rpc") or "https://api.devnet.solana.com",
+                                        settings.get("_shipped_rpc"))
+
+
+def menu_balance(settings, owner, timeout=MENU_RPC_TIMEOUT):
+    """The wallet's SUMO in base units, or None when the network can't answer in time. One request, no
+    retries, and a hard time limit (the request runs in a helper thread that is simply left behind)."""
+    result = {}
+
+    def work():
+        try:
+            if not menu_rpc_allowed(settings):
+                return
+            program = Pubkey.from_string(settings["program_id"])
+            mint = Pubkey.find_program_address([b"mint"], program)[0]
+            ata = Pubkey.find_program_address([bytes(owner), bytes(TOKEN_PROGRAM), bytes(mint)], ATA_PROGRAM)[0]
+            body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "getTokenAccountBalance",
+                               "params": [str(ata), {"commitment": "confirmed"}]}).encode()
+            req = urllib.request.Request(settings["rpc"], body, {"Content-Type": "application/json"})
+            with urllib.request.urlopen(req, timeout=timeout) as r:
+                out = json.loads(r.read(65536))
+            if "result" in out:
+                result["units"] = int(out["result"]["value"]["amount"])
+            elif "could not find account" in str((out.get("error") or {}).get("message", "")).lower():
+                result["units"] = 0      # no token account yet = nothing mined yet
+        except Exception:
+            pass
+
+    t = threading.Thread(target=work, daemon=True)
+    t.start()
+    t.join(timeout + 1.0)
+    return result.get("units")
+
+
+def menu_balance_text(units):
+    s = fmt_sumo(units)
+    if "." not in s:
+        s += ".00"
+    elif len(s.split(".")[1]) < 2:
+        s += "0"
+    return s + " SUMO"
+
+
+def menu_text(settings, keypair_path, cols, rows):
+    """The finished picture menu as text, or None when the plain menu should be used instead. Never raises."""
+    try:
+        if cols < 80 or rows < 30:
+            return None
+        import sumo_menu
+        status, pub = read_public_key(keypair_path)
+        if status == "none":
+            parts = ("no wallet yet", False, "-", False)
+        elif status == "bad":
+            parts = ("wallet file unreadable", False, "-", False)
+        else:
+            units = menu_balance(settings, pub)
+            balance = ("balance: offline", False) if units is None else (menu_balance_text(units), True)
+            parts = (short(pub), True) + balance
+        return sumo_menu.render(VERSION, *parts, selected=1, skip_last_cell=(rows == sumo_menu.ROWS and cols == sumo_menu.COLS))
+    except Exception:
+        return None
+
+
+def cmd_menu(args, settings):
+    """Draw the picture menu. Exit 0 = drawn; exit 1 (nothing printed) = use the plain menu."""
+    text = None
+    try:
+        if enable_colour(args.plain):
+            size = shutil.get_terminal_size(fallback=(0, 0))
+            text = menu_text(settings, args.keypair, size.columns, size.lines)
+            if text is not None:
+                text.encode(sys.stdout.encoding or "ascii")   # a console that can't show it: plain menu
+    except Exception:
+        text = None
+    if text is None:
+        sys.exit(1)
+    try:
+        sys.stdout.write(text)
+        sys.stdout.flush()
+    except Exception:
+        sys.exit(1)
+
+
 def cmd_balance(args, settings):
     chain = Chain(settings)
     kp = load_key(args.keypair)
@@ -1178,7 +1291,7 @@ def _main():
     # allow_abbrev=False: "--ye" or "--y" must NOT quietly mean "--yes" (which skips the y/N questions).
     ap = argparse.ArgumentParser(description="Sumo Frog miner (test networks only, worthless test coins)",
                                  allow_abbrev=False)
-    ap.add_argument("command", choices=["mine", "status", "balance", "new-key", "faucet", "set-payout", "withdraw"])
+    ap.add_argument("command", choices=["mine", "status", "balance", "new-key", "faucet", "set-payout", "withdraw", "menu"])
     ap.add_argument("address", nargs="?", help="for set-payout or withdraw: your wallet's PUBLIC address (set-payout also takes 'none')")
     ap.add_argument("--keypair", default=os.path.join(HERE, "sumo-devnet-key.json"),
                     help="the miner's own test wallet file (pays the test fees)")
@@ -1194,7 +1307,8 @@ def _main():
     if args.rpc:
         settings["rpc"] = args.rpc
     run = {"mine": cmd_mine, "status": cmd_status, "balance": cmd_balance, "new-key": cmd_new_key,
-           "faucet": cmd_faucet, "set-payout": cmd_set_payout, "withdraw": cmd_withdraw}[args.command]
+           "faucet": cmd_faucet, "set-payout": cmd_set_payout, "withdraw": cmd_withdraw,
+           "menu": cmd_menu}[args.command]
     if args.command == "mine":
         with quiet_console_input():
             run(args, settings)

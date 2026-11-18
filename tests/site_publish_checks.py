@@ -2,6 +2,7 @@
 """Offline checks for the public-site publish dest guard and the miner zip path.
 No network. Run: python3 tests/site_publish_checks.py
 """
+import ast
 import os
 import subprocess
 import sys
@@ -363,6 +364,32 @@ def main():
        and "five old buttons" not in old_block[:old_block.index("\n:old_buttons_text\n")]
        and "five old buttons" not in old_block[old_block.index("\n:old_guide_text\n"):]
        and old_block.index("\n:old_tail\n") < old_block.index("NEVER delete sumo-devnet-key.json") < old_block.index("\n:old_buttons_text\n"))
+    menu_at = launcher.index("\n:menu\n")
+    plain_at = launcher.index("\n:menu_plain\n")
+    pick_at = launcher.index("\n:menu_pick\n")
+    menu_part, plain_part, pick_part = launcher[menu_at:plain_at], launcher[plain_at:pick_at], launcher[pick_at:]
+    ok("launcher: the picture menu is drawn first ('sumo_miner.py menu', errors hidden) and any failure goes to the plain menu",
+       '"%PY%" sumo_miner.py menu 2>nul' in menu_part and "if errorlevel 1 goto menu_plain" in menu_part
+       and menu_part.index("sumo_miner.py menu") < menu_part.index("if errorlevel 1 goto menu_plain") < menu_part.index("choice /c 123456 /n >nul")
+       and "goto menu_pick" in menu_part)
+    ok("launcher: the plain menu text is still all there (items 1-6 and its own 'Press a number from 1 to 6' choice)",
+       all(f"echo     {i}   {label}" in plain_part for i, label in enumerate(
+           ("Mine SUMO", "Check balance", "Get test SOL", "Set payout address", "Withdraw SOL", "Exit"), 1))
+       and 'choice /c 123456 /n /m "  Press a number from 1 to 6: "' in plain_part)
+    ok("launcher: both menus end in the same key check, highest first (6 5 4 3 2 1), and anything else goes back to the menu",
+       [l.strip() for l in pick_part.split("\n")[2:9]] ==
+       ["if errorlevel 6 goto bye", "if errorlevel 5 goto withdraw", "if errorlevel 4 goto payout",
+        "if errorlevel 3 goto faucet", "if errorlevel 2 goto balance", "if errorlevel 1 goto mine", "goto menu"]
+       and launcher.count("choice /c 123456 /n") == 2 and "if errorlevel" not in plain_part)
+    ok("launcher: mining from the picture menu clears the screen first; a new wallet is still never made when an old one sits at the top",
+       'if exist "%~dp0files\\sumo-devnet-key.json" goto mine_clear' in launcher
+       and "\n:mine_clear\ncls\ngoto do_mine\n" in launcher)
+    ok("devnet zip ships sumo_menu.py next to sumo_miner.py, and the miner has a 'menu' command",
+       ("files/sumo_menu.py", "sumo_menu.py") in z.DEVNET_LAYOUT and '"menu"]' in miner_src)
+    ok("sumo_menu.py is plain ASCII (build_zips-style) and imports nothing but itself (no network, no files)",
+       all(c < 128 for c in open(os.path.join(miner_dir, "sumo_menu.py"), "rb").read())
+       and not [n for n in ast.walk(ast.parse(open(os.path.join(miner_dir, "sumo_menu.py")).read()))
+                if isinstance(n, (ast.Import, ast.ImportFrom))])
     ok("launcher MINING line escapes both arrows (^>^>)", "echo  ^>^> MINING" in launcher and ">^>" not in launcher.replace("^>^>", ""))
     ok("launcher no longer sends people to menu option 3 for test SOL (faucet.solana.com is the real route)",
        "choose 3" not in launcher and "https://faucet.solana.com" in launcher)

@@ -147,7 +147,7 @@ else:
 
 # ---- Bug 2: the miner only ever opens its own files by exact name, never lists a folder ----
 FORBIDDEN = {"glob", "iglob", "rglob", "walk", "listdir", "scandir", "iterdir", "fnmatch", "filter"}
-for fname in ("sumo_miner.py", "sumo_art.py"):
+for fname in ("sumo_miner.py", "sumo_art.py", "sumo_menu.py"):
     tree = ast.parse(open(os.path.join(MINER, fname)).read())
     bad = [n.attr if isinstance(n, ast.Attribute) else n.id for n in ast.walk(tree)
            if (isinstance(n, ast.Attribute) and n.attr in FORBIDDEN and n.attr != "filter")
@@ -445,5 +445,208 @@ r = subprocess.run([sys.executable, "-c", ABBREV % {"miner": MINER, "argv": ["wi
 ok("the full --yes still works when someone really types it", r.returncode == 0 and "YES_VALUE [True]" in r.stdout)
 r = subprocess.run([sys.executable, "-c", ABBREV % {"miner": MINER, "argv": ["withdraw", "--", "--yes"]}], capture_output=True, text=True)
 ok("after -- , '--yes' is only an address (the launcher's form), never the option", "YES_VALUE [False]" in r.stdout)
+
+# ---- the picture menu (Pixy's design): `sumo_miner.py menu`, drawn before the launcher asks for a key ----
+import json  # noqa: E402
+import re  # noqa: E402
+import time  # noqa: E402
+import sumo_menu  # noqa: E402
+
+SGR = re.compile(r"\x1b\[[0-9;]*m")
+MOVE = re.compile(r"\x1b\[(\d+);(\d+)H")
+
+
+def visible_rows(ansi):
+    """The screen as plain text rows (cursor moves split the rows, colour codes dropped)."""
+    parts = MOVE.split(ansi)             # [pre, row, col, text, row, col, text, ...]
+    rows = {}
+    for i in range(1, len(parts) - 2, 3):
+        if parts[i + 2]:                 # the last move only parks the cursor
+            rows[int(parts[i])] = SGR.sub("", parts[i + 2])
+    return rows
+
+
+class FakeRpc(http.server.BaseHTTPRequestHandler):
+    mode = "balance"      # "balance" | "missing" | "hang"
+    amount = "1500000000"
+    hits = []
+
+    def do_POST(self):
+        FakeRpc.hits.append(self.path)
+        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        if FakeRpc.mode == "hang":
+            time.sleep(8)
+            return
+        if FakeRpc.mode == "missing":
+            body = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32602, "message": "Invalid param: could not find account"}}
+        else:
+            body = {"jsonrpc": "2.0", "id": 1, "result": {"value": {"amount": FakeRpc.amount}}}
+        data = json.dumps(body).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *a):
+        pass
+
+
+class QuietServer(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+
+
+srv = QuietServer(("127.0.0.1", 0), FakeRpc)
+threading.Thread(target=srv.serve_forever, daemon=True).start()
+RPC = f"http://127.0.0.1:{srv.server_address[1]}"
+MENU_DIR = tempfile.mkdtemp()
+KEYFILE = os.path.join(MENU_DIR, "sumo-devnet-key.json")
+kp = Keypair()
+with open(KEYFILE, "w") as f:
+    json.dump(list(bytes(kp)), f)
+SECRET32 = bytes(kp)[:32]
+SECRET_FORMS = [str(kp), str(m.Pubkey.from_bytes(SECRET32)), SECRET32.hex(), bytes(kp).hex(),
+                ", ".join(str(b) for b in SECRET32[:10]), ",".join(str(b) for b in SECRET32[:10])]
+SET = {"rpc": RPC, "program_id": "6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW", "network": "devnet"}
+
+FakeRpc.mode = "balance"
+ansi = m.menu_text(SET, KEYFILE, 120, 40)
+rows = visible_rows(ansi)
+ok("menu: draws all 30 rows, each exactly 80 columns wide", sorted(rows) == list(range(1, 31))
+   and all(len(r) == 80 for r in rows.values()))
+ok("menu: truecolour (24-bit) codes, no line feeds, cursor parked on the prompt row",
+   "\x1b[38;2;" in ansi and ";48;2;" in ansi and "\n" not in ansi and ansi.endswith("\x1b[27;" + str(sumo_menu.prompt_cursor()[1]) + "H"))
+ok("menu: has the frog, the SUMO logo, FROG MINER, TEST COINS / TEST CHAIN, the wallet panel, MAIN MENU 1-6, the prompt and the horizon",
+   "\u2588" in rows[2] and "FROG MINER" in rows[10] and "TEST COINS / TEST CHAIN" in rows[11]
+   and "WALLET" in rows[14] and "BALANCE" in rows[15] and "MAIN MENU" in rows[18]
+   and all(f"[{i}] {label}" in rows[18 + i] for i, label in enumerate(sumo_menu.ITEMS, 1))
+   and "Press a number from 1 to 6" in rows[27] and "\u2580" in rows[28] and "/" in rows[29])
+ok("menu: the [1] row is the highlighted one (arrow + inverted bar)", "\u25ba [1] Mine SUMO" in rows[19] and "\u25ba" not in rows[20])
+ok("menu: shows the real short wallet and the real balance (1.50 SUMO)", m.short(kp.pubkey()) in rows[14] and "1.50 SUMO" in rows[15])
+old_version = m.VERSION
+ok("menu: shows VERSION (v0.6.2 today), not the mockup's v0.5", m.VERSION in rows[10] and "v0.5" not in "".join(rows.values()) and m.VERSION == "v0.6.2")
+m.VERSION = "v9.8.7"
+ok("menu: the version comes from VERSION, not a fixed string", "v9.8.7" in visible_rows(m.menu_text(SET, KEYFILE, 80, 30))[10])
+m.VERSION = old_version
+r30 = visible_rows(m.menu_text(SET, KEYFILE, 80, 30))
+ok("menu: in a window exactly 80 x 30 it leaves out the bottom-right cell (so nothing scrolls), every other row is full width",
+   len(r30[30]) == 79 and all(len(r30[i]) == 80 for i in range(1, 30)))
+ok("menu: in a wider window (or a taller one) the bottom-right cell is drawn too",
+   len(visible_rows(m.menu_text(SET, KEYFILE, 100, 30))[30]) == 80 and len(visible_rows(m.menu_text(SET, KEYFILE, 80, 31))[30]) == 80)
+ok("menu: grid cells are all in code page 437 or the few block/box characters Windows fonts have",
+   all(len(row) == 80 for row in sumo_menu.build_grid("v1", "a", True, "b", True)) and len(sumo_menu.build_grid("v1", "a", True, "b", True)) == 30)
+
+# no secret key output
+FakeRpc.mode = "balance"
+outs = [ansi, m.menu_text(SET, KEYFILE, 80, 30)]
+ok("menu: no form of the secret key (base58, hex, number list) is in the screen text",
+   not any(s in o for o in outs for s in SECRET_FORMS))
+menu_fn_src = ""
+msrc = open(os.path.join(MINER, "sumo_miner.py")).read()
+for fn in ("read_public_key", "menu_rpc_allowed", "menu_balance", "menu_balance_text", "menu_text", "cmd_menu"):
+    a = msrc.index(f"def {fn}(")
+    menu_fn_src += msrc[a:msrc.index("\ndef ", a + 5)]
+tree = ast.parse(menu_fn_src)
+ok("menu: the code never touches the secret half (no Keypair, no .secret(), no load_key, no print of the key list); only data[32:]",
+   not any(isinstance(n, ast.Name) and n.id in ("Keypair", "load_key", "print") for n in ast.walk(tree))
+   and not any(isinstance(n, ast.Attribute) and n.attr == "secret" for n in ast.walk(tree))
+   and "data[32:]" in menu_fn_src and "data[:32]" not in menu_fn_src and "data[0" not in menu_fn_src)
+
+# fallbacks
+ok("menu fallback: no wallet file -> 'no wallet yet' (and no balance request)",
+   (lambda r: "no wallet yet" in r[14] and len(r) == 30)(visible_rows(m.menu_text(SET, os.path.join(MENU_DIR, "nope.json"), 100, 30))))
+for label, content in (("not JSON", "not json"), ("wrong length", "[1,2,3]"), ("not numbers", json.dumps(["a"] * 64)),
+                       ("numbers out of range", json.dumps([999] * 64))):
+    bad = os.path.join(MENU_DIR, "bad.json")
+    with open(bad, "w") as f:
+        f.write(content)
+    r = m.menu_text(SET, bad, 100, 30)
+    ok(f"menu fallback: unreadable wallet file ({label}) -> still draws, says 'wallet file unreadable', no crash",
+       r is not None and "wallet file unreadable" in visible_rows(r)[14] and not any(s in r for s in ("999", "Traceback")))
+down = dict(SET, rpc="http://127.0.0.1:1")      # nothing listens there
+t0 = time.time()
+r = visible_rows(m.menu_text(down, KEYFILE, 100, 30))
+ok("menu fallback: no network -> 'balance: offline', wallet still shown, fast", "balance: offline" in r[15]
+   and m.short(kp.pubkey()) in r[14] and time.time() - t0 < 4)
+FakeRpc.mode = "hang"
+t0 = time.time()
+r = visible_rows(m.menu_text(SET, KEYFILE, 100, 30))
+took = time.time() - t0
+ok(f"menu fallback: a server that never answers -> 'balance: offline' after about {m.MENU_RPC_TIMEOUT:.1f}s (took {took:.1f}s, never more than 5s)",
+   "balance: offline" in r[15] and took < 5)
+FakeRpc.mode = "missing"
+ok("menu: wallet with no token account yet -> 0.00 SUMO", "0.00 SUMO" in visible_rows(m.menu_text(SET, KEYFILE, 100, 30))[15])
+FakeRpc.mode = "balance"
+FakeRpc.amount = "123456789"
+ok("menu: fractional balance keeps its digits (0.1235 SUMO style, at least two decimals)",
+   "0.1235 SUMO" in visible_rows(m.menu_text(SET, KEYFILE, 100, 30))[15] and m.menu_balance_text(5 * 10 ** 9) == "5.00 SUMO"
+   and m.menu_balance_text(5 * 10 ** 8) == "0.50 SUMO" and m.menu_balance_text(1234 * 10 ** 9) == "1,234.00 SUMO")
+FakeRpc.amount = "1500000000"
+FakeRpc.hits.clear()
+foreign = dict(SET, rpc="https://mainnet.example.org")
+t0 = time.time()
+ok("menu: never asks a link that isn't this computer, the config's devnet link or the shipped link (offline, no request)",
+   "balance: offline" in visible_rows(m.menu_text(foreign, KEYFILE, 100, 30))[15] and not FakeRpc.hits and time.time() - t0 < 2
+   and m.menu_rpc_allowed(dict(SET, rpc="https://api.devnet.solana.com")) and not m.menu_rpc_allowed(dict(SET, rpc="file:///etc/passwd")))
+ok("menu fallback: window narrower than 80 columns (or shorter than 30 rows) -> None, so the launcher shows the plain menu",
+   m.menu_text(SET, KEYFILE, 79, 40) is None and m.menu_text(SET, KEYFILE, 120, 29) is None and m.menu_text(SET, KEYFILE, 0, 0) is None
+   and m.menu_text(SET, KEYFILE, 80, 30) is not None)
+real_render = sumo_menu.render
+sumo_menu.render = lambda *a, **k: 1 / 0
+ok("menu fallback: if drawing fails for any reason -> None (plain menu), no exception", m.menu_text(SET, KEYFILE, 100, 30) is None)
+sumo_menu.render = real_render
+
+# end to end: the real command in a scratch copy of the devnet files, like the launcher runs it
+E2E = os.path.join(MENU_DIR, "files")
+os.makedirs(E2E)
+for fname in ("sumo_miner.py", "sumo_art.py", "sumo_menu.py"):
+    shutil.copy(os.path.join(MINER, fname), E2E)
+with open(os.path.join(MINER, "devnet", "sumo_config.devnet.json")) as f:
+    cfg = json.load(f)
+cfg["devnet_rpc"] = RPC
+with open(os.path.join(E2E, "sumo_config.json"), "w") as f:
+    json.dump(cfg, f)
+shutil.copy(KEYFILE, os.path.join(E2E, "sumo-devnet-key.json"))
+
+
+def run_menu(cols, lines, extra=None, keep_key=True):
+    env = dict(os.environ, SUMO_FORCE_COLOUR="1", COLUMNS=str(cols), LINES=str(lines), PYTHONIOENCODING="utf-8",
+               TERM="xterm-256color")
+    env.pop("NO_COLOR", None)
+    env.pop("SUMO_PLAIN", None)
+    env.update(extra or {})
+    if not keep_key and os.path.exists(os.path.join(E2E, "sumo-devnet-key.json")):
+        os.remove(os.path.join(E2E, "sumo-devnet-key.json"))
+    return subprocess.run([sys.executable, os.path.join(E2E, "sumo_miner.py"), "menu"], capture_output=True,
+                          text=True, env=env, cwd=E2E, timeout=30)
+
+
+FakeRpc.mode = "balance"
+r = run_menu(100, 30)
+rr = visible_rows(r.stdout)
+ok("menu command: exit 0, 30 rows of 80 columns, real version, short wallet, balance, nothing on stderr",
+   r.returncode == 0 and sorted(rr) == list(range(1, 31)) and all(len(rr[i]) == 80 for i in range(1, 31))
+   and m.VERSION in rr[10] and m.short(kp.pubkey()) in rr[14] and "1.50 SUMO" in rr[15] and r.stderr == "")
+ok("menu command: the secret key is nowhere in its output or errors", not any(s in r.stdout + r.stderr for s in SECRET_FORMS))
+for label, env_cols, env_extra in (("narrow window (79 columns)", 79, {}), ("NO_COLOR set", 100, {"NO_COLOR": "1"}),
+                                   ("SUMO_PLAIN set", 100, {"SUMO_PLAIN": "1"})):
+    r = run_menu(env_cols, 30, env_extra)
+    ok(f"menu command: {label} -> exit 1 and nothing printed (the launcher then shows its plain menu)",
+       r.returncode == 1 and r.stdout == "" and r.stderr == "")
+r = subprocess.run([sys.executable, os.path.join(E2E, "sumo_miner.py"), "menu"], capture_output=True, text=True, cwd=E2E,
+                   env={k: v for k, v in dict(os.environ, COLUMNS="100", LINES="30", PYTHONIOENCODING="utf-8",
+                                       TERM="xterm-256color").items() if k not in ("NO_COLOR", "SUMO_PLAIN", "SUMO_FORCE_COLOUR")},
+                   timeout=30)
+ok("menu command: output that isn't a console (no SUMO_FORCE_COLOUR) -> exit 1, nothing printed", r.returncode == 1 and r.stdout == "")
+r = run_menu(100, 30, keep_key=False)
+ok("menu command: no wallet file -> exit 0, 'no wallet yet'", r.returncode == 0 and "no wallet yet" in visible_rows(r.stdout)[14])
+os.remove(os.path.join(E2E, "sumo_menu.py"))
+shutil.copy(KEYFILE, os.path.join(E2E, "sumo-devnet-key.json"))
+r = run_menu(100, 30)
+ok("menu command: sumo_menu.py missing -> exit 1, nothing printed (plain menu)", r.returncode == 1 and r.stdout == "" and r.stderr == "")
+os.remove(os.path.join(E2E, "sumo_config.json"))
+r = run_menu(100, 30)
+ok("menu command: even a missing config -> exit 1 (the launcher hides stderr with 2>nul and shows the plain menu)", r.returncode == 1 and r.stdout == "")
+srv.shutdown()
+
 
 print(f"miner console checks: {passed} passed")

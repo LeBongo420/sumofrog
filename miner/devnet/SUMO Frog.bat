@@ -20,6 +20,13 @@ if defined OLDGUIDE goto oldfiles
 
 :menu
 cls
+rem Pixy's picture menu is drawn by sumo_miner.py. It exits 1 when it can't draw (small window, no colour, any error): then the plain menu below is used.
+"%PY%" sumo_miner.py menu 2>nul
+if errorlevel 1 goto menu_plain
+choice /c 123456 /n >nul
+goto menu_pick
+:menu_plain
+cls
 echo.
 echo   SUMO FROG MINER   test coins only, no real money
 echo   ------------------------------------------------
@@ -32,6 +39,7 @@ echo     5   Withdraw SOL
 echo     6   Exit
 echo.
 choice /c 123456 /n /m "  Press a number from 1 to 6: "
+:menu_pick
 if errorlevel 6 goto bye
 if errorlevel 5 goto withdraw
 if errorlevel 4 goto payout
@@ -42,7 +50,7 @@ goto menu
 
 :mine
 rem Never make a new wallet while an old one still sits next to this launcher.
-if exist "%~dp0files\sumo-devnet-key.json" goto do_mine
+if exist "%~dp0files\sumo-devnet-key.json" goto mine_clear
 if exist "%~dp0sumo-devnet-key.json" goto stopsafe
 cls
 echo.
@@ -61,6 +69,11 @@ echo.
 echo  Mining stopped.
 pause
 goto menu
+
+rem Clear the picture menu first (an existing wallet goes straight to mining).
+:mine_clear
+cls
+goto do_mine
 
 :balance
 cls
