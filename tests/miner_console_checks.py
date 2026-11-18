@@ -422,4 +422,28 @@ msg = low_sol_message("private Sumo test network")
 ok("private-network low-SOL message names the faucet command, no menu", "py sumo_miner.py faucet" in msg
    and "menu" not in msg and "faucet.solana.com" not in msg)
 
+# ---- Ribbit 18h Note 2: shortened options like --ye / --y must not mean --yes ----
+ABBREV = r"""
+import sys
+sys.path.insert(0, %(miner)r)
+import sumo_miner as m
+m.load_settings = lambda: {}
+seen = []
+m.cmd_withdraw = lambda args, settings: seen.append(args.yes)
+sys.argv = ["sumo_miner.py"] + %(argv)r
+try:
+    m.main()
+finally:
+    print("YES_VALUE", seen, flush=True)
+"""
+for flag in ("--ye", "--y", "--YE"):
+    r = subprocess.run([sys.executable, "-c", ABBREV % {"miner": MINER, "argv": ["withdraw", flag]}],
+                       capture_output=True, text=True)
+    ok(f"miner refuses {flag} (exit 2, 'unrecognized arguments', command never runs)",
+       r.returncode == 2 and "unrecognized arguments" in r.stderr and "YES_VALUE []" in r.stdout)
+r = subprocess.run([sys.executable, "-c", ABBREV % {"miner": MINER, "argv": ["withdraw", "--yes"]}], capture_output=True, text=True)
+ok("the full --yes still works when someone really types it", r.returncode == 0 and "YES_VALUE [True]" in r.stdout)
+r = subprocess.run([sys.executable, "-c", ABBREV % {"miner": MINER, "argv": ["withdraw", "--", "--yes"]}], capture_output=True, text=True)
+ok("after -- , '--yes' is only an address (the launcher's form), never the option", "YES_VALUE [False]" in r.stdout)
+
 print(f"miner console checks: {passed} passed")

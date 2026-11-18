@@ -15,7 +15,9 @@ First time on this PC (or updating the old folder)
    folder and put the other somewhere safe, for example a folder called "old wallet".
    IMPORTANT: delete the five old buttons next to SUMO Frog.bat: Mine SUMO.bat, Check balance.bat,
    Get test SOL.bat, Set payout address.bat and Withdraw SOL.bat. The old Mine SUMO.bat can make a
-   SECOND wallet. Delete only those five .bat files, never sumo-devnet-key.json.
+   SECOND wallet. Also delete the OLD HOW TO MINE.txt if it sits next to SUMO Frog.bat (this guide, in the
+   "files" folder, is the current guide). Delete only those five .bat files and that old guide, never
+   sumo-devnet-key.json.
    SUMO Frog.bat warns you if an old button is still there.
    The other old program files left in the folder (sumo_miner.py, .venv and so on) are no longer
    used and can be ignored.

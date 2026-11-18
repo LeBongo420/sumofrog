@@ -281,14 +281,29 @@ def main():
     pos = [launcher.find(x) for x in order]
     ok("launcher menu keys are tested highest first: 6, 5, 4, 3, 2, 1 (the other way round would make every key mine)",
        all(p >= 0 for p in pos) and pos == sorted(pos))
-    ok("launcher never passes --yes (or -y) to anything: Withdraw and Set payout always ask",
-       not any(tok.lower() in ("--yes", "-y", "/y") for l in lines for tok in l.split()))
+    ok("launcher never passes --yes, --y..., -y or /y to anything (any word starting that way): Withdraw and Set payout always ask",
+       not any(tok.lower().startswith(("--y", "-y", "/y")) for l in lines for tok in l.split()))
     ok("launcher keeps its Withdraw / Set payout screens that say nothing is sent until you type y",
        "nothing is sent until you type  y" in launcher)
     miner_src = open(os.path.join(miner_dir, "sumo_miner.py"), encoding="utf-8").read()
     wd = miner_src[miner_src.index("def cmd_withdraw"):miner_src.index("def _worker")]
     ok("sumo_miner.py withdraw still asks 'Send now? [y/N]' unless --yes is given, and the launcher never gives it",
        'input("Send now? [y/N] ")' in wd and "if not args.yes:" in wd and "--yes" not in launcher)
+    wdest = miner_src[miner_src.index("def withdraw_destination"):miner_src.index("def cmd_withdraw")]
+    ask = 'if input("Send to this address? [y/N] ").strip().lower() not in ("y", "yes"):'
+    ok("sumo_miner.py withdraw still asks 'Send to this address? [y/N]' on the saved-payout path unless --yes is given",
+       ask in wdest and "if sys.stdin.isatty() and not args.yes:" in wdest[:wdest.index(ask)][-120:]
+       and "dest = None" in wdest[wdest.index(ask):wdest.index(ask) + 200])
+    import ast
+    parsers = [n for n in ast.walk(ast.parse(miner_src)) if isinstance(n, ast.Call)
+               and getattr(n.func, "attr", getattr(n.func, "id", "")) in ("ArgumentParser", "add_parser")]
+    ok("every argparse parser and subparser in sumo_miner.py has allow_abbrev=False, so --ye / --y can't mean --yes",
+       len(parsers) >= 1 and all(any(k.arg == "allow_abbrev" and getattr(k.value, "value", None) is False
+                                     for k in n.keywords) for n in parsers))
+    ok("launcher also warns about an old HOW TO MINE.txt next to it, and says to delete it",
+       'if exist "%~dp0HOW TO MINE.txt" set "OLDBTN=1"' in launcher
+       and launcher.index('if exist "%~dp0HOW TO MINE.txt" set "OLDBTN=1"') < launcher.index("if defined OLDBTN goto oldbuttons")
+       and "OLD guide. Delete it too" in launcher and "The current guide is in the files folder" in launcher)
     sp = miner_src[miner_src.index("def cmd_set_payout"):miner_src.index("def cmd_withdraw")]
     ok("sumo_miner.py set-payout still asks to type YES", 'input("Type YES to save it: ")' in sp)
     for label, call in (("payout", 'sumo_miner.py set-payout -- "%ADDR%"'), ("withdraw", 'sumo_miner.py withdraw -- "%ADDR%"')):
@@ -404,6 +419,8 @@ def main():
            "SUMO Frog.bat" in flat and "delete the five old buttons" in flat and "SECOND wallet" in flat
            and all(n in flat for n in old_names)
            and "never sumo-devnet-key.json" in flat and "Delete only those five .bat files" in flat)
+        ok(f"{guide}: says to delete the old HOW TO MINE.txt next to SUMO Frog.bat (the current guide is in files)",
+           "delete the OLD HOW TO MINE.txt" in flat and "current guide" in flat and "never sumo-devnet-key.json" in flat)
         ok(f"{guide}: never tells people to copy the wallet file",
            "copy sumo-devnet-key" not in flat.lower() and "copy it" not in flat.lower())
         ok(f"{guide}: explains the 'Two wallets found' stop", "Two wallets found" in flat)

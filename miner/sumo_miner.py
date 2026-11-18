@@ -1175,7 +1175,9 @@ def main():
 def _main():
     set_window_icon()
     settings = load_settings()
-    ap = argparse.ArgumentParser(description="Sumo Frog miner (test networks only, worthless test coins)")
+    # allow_abbrev=False: "--ye" or "--y" must NOT quietly mean "--yes" (which skips the y/N questions).
+    ap = argparse.ArgumentParser(description="Sumo Frog miner (test networks only, worthless test coins)",
+                                 allow_abbrev=False)
     ap.add_argument("command", choices=["mine", "status", "balance", "new-key", "faucet", "set-payout", "withdraw"])
     ap.add_argument("address", nargs="?", help="for set-payout or withdraw: your wallet's PUBLIC address (set-payout also takes 'none')")
     ap.add_argument("--keypair", default=os.path.join(HERE, "sumo-devnet-key.json"),

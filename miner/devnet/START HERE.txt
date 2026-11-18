@@ -13,7 +13,9 @@ Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
    don't delete anything. IMPORTANT: delete the five old buttons next to SUMO
    Frog.bat: Mine SUMO.bat, Check balance.bat, Get test SOL.bat, Set payout
    address.bat and Withdraw SOL.bat. The old Mine SUMO.bat can make a SECOND
-   wallet. Delete only those five .bat files, never sumo-devnet-key.json.
+   wallet. Also delete the OLD HOW TO MINE.txt if it sits next to SUMO
+   Frog.bat (the current guide is in the files folder). Delete only those five
+   .bat files and that old guide, never sumo-devnet-key.json.
    The other old program files left in the folder are no longer used and can
    be ignored. SUMO Frog.bat warns you if an old button is still there.)
 

@@ -6,13 +6,14 @@ rem Wallet safety first: _start.bat moves an old wallet in, or stops on two wall
 call "%~dp0files\_start.bat"
 if errorlevel 2 goto stopsafe
 if errorlevel 1 goto fail
-rem An older miner folder can still hold the five old buttons: warn once, before the menu.
+rem An older miner folder can still hold the five old buttons and the old guide: warn once, before the menu.
 set "OLDBTN="
 if exist "%~dp0Mine SUMO.bat" set "OLDBTN=1"
 if exist "%~dp0Check balance.bat" set "OLDBTN=1"
 if exist "%~dp0Get test SOL.bat" set "OLDBTN=1"
 if exist "%~dp0Set payout address.bat" set "OLDBTN=1"
 if exist "%~dp0Withdraw SOL.bat" set "OLDBTN=1"
+if exist "%~dp0HOW TO MINE.txt" set "OLDBTN=1"
 if defined OLDBTN goto oldbuttons
 
 :menu
@@ -139,7 +140,7 @@ exit /b 2
 :oldbuttons
 cls
 echo.
-echo  !! OLD BUTTONS FOUND next to SUMO Frog.bat.
+echo  !! OLD FILES FOUND next to SUMO Frog.bat.
 echo  Please delete the five old buttons. They are from the older miner and are no longer used:
 echo      Mine SUMO.bat
 echo      Check balance.bat
@@ -147,7 +148,9 @@ echo      Get test SOL.bat
 echo      Set payout address.bat
 echo      Withdraw SOL.bat
 echo  The old Mine SUMO.bat can make a SECOND wallet. Use SUMO Frog.bat only.
-echo  Delete only those five .bat files.
+echo  If HOW TO MINE.txt sits next to SUMO Frog.bat, that is the OLD guide. Delete it too.
+echo  The current guide is in the files folder.
+echo  Delete only those five .bat files and that old HOW TO MINE.txt.
 echo  NEVER delete sumo-devnet-key.json. It is your wallet and it holds your test SUMO.
 echo.
 pause
