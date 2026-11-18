@@ -47,7 +47,7 @@ from solders.pubkey import Pubkey
 from solders.transaction import Transaction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v0.6.1"
+VERSION = "v0.6.2"
 DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
 MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"
 TOKEN_PROGRAM = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
@@ -658,7 +658,7 @@ def check_wallet_account(chain, pk, nothing):
     return acct
 
 
-FIX_SAVED = "Fix it with Set payout address.bat (or: py sumo_miner.py set-payout <address>)."
+FIX_SAVED = "Fix it with Set payout address (in the menu or its button; or: py sumo_miner.py set-payout <address>)."
 
 
 def saved_payout(settings):
@@ -842,7 +842,7 @@ def cmd_withdraw(args, settings):
         sys.exit(f"!! The network refused it: {e}. Nothing was sent.")
     print(f"\n*** SENT. Transaction {sig}")
     print(f"Destination now has {chain.sol_balance(dest):.6f} test SOL.")
-    print("To mine again on this PC, get test SOL first (Get test SOL.bat).")
+    print("To mine again on this PC, get test SOL first (Get test SOL).")
 
 
 # ======================= hashing workers =======================
@@ -936,7 +936,7 @@ def cmd_mine(args, settings):
     earner = payout or kp.pubkey()
     if chain.sol_balance(kp.pubkey()) < 0.003:
         sys.exit(f"Your test wallet {kp.pubkey()} needs a little test SOL for fees (about 0.003).\n"
-                 f"Run:  py sumo_miner.py faucet   (or double-click Get test SOL.bat)")
+                 f"Run:  py sumo_miner.py faucet   (or choose Get test SOL in the menu)")
     workers = args.workers or os.cpu_count() or 1
     scr = Screen(enable_colour(args.plain))
     scr.start(dict(cluster=chain.cluster, fee_wallet=str(kp.pubkey()), workers=workers,

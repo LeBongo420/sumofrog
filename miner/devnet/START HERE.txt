@@ -1,4 +1,4 @@
-SUMO FROG MINER (devnet) — START HERE  (test coins only, no real money)
+SUMO FROG MINER (devnet) - START HERE  (test coins only, no real money)
 =======================================================================
 
 You need Python 3 installed first (free): https://www.python.org/downloads/
@@ -7,24 +7,30 @@ Tick "Add python.exe to PATH" in the installer. Everything else sets itself up.
 1. Right-click the zip, choose "Extract All...", then click Extract.
    (Updating the older flat version? Extract into the SAME folder and choose
    "Replace the files". Your wallet, sumo-devnet-key.json, moves into the new
-   files folder by itself the first time you run Mine SUMO.bat. NEVER delete
+   files folder by itself the first time you run SUMO Frog.bat. NEVER delete
    sumo-devnet-key.json, wherever it is: it holds your test SUMO. If the miner
    says "Two wallets found", it has stopped on purpose: read what it says and
-   don't delete anything. The old program files left in the folder are no longer
-   used and can be ignored.)
+   don't delete anything. The old buttons and program files left in the folder
+   are no longer used and can be ignored.)
 
-2. Double-click  Mine SUMO.bat
+2. Double-click  SUMO Frog.bat
    If Windows says "Windows protected your PC", click "More info" then
    "Run anyway". It's a plain text script: right-click it and choose Edit
    to see what it does.
-   The first run makes a test wallet and shows its address. It will then say
-   it needs test SOL: that's normal, go to step 3.
+   A menu appears. Press 1 to start mining.
+   The first time, it makes a test wallet and shows its address. It will then
+   say it needs test SOL: that's normal, go to step 3.
 
 3. Get free test SOL: open https://faucet.solana.com, sign in with GitHub,
-   pick "Devnet", paste the wallet address from step 2 (or double-click
-   Check balance.bat to see it again), and request the most it allows.
+   pick "Devnet", paste the wallet address from step 2 (or press 2 in the menu,
+   Check balance, to see it again), and request the most it allows.
 
-4. Double-click  Mine SUMO.bat again. Mining starts.
+4. Double-click  SUMO Frog.bat again and press 1. Mining starts.
+
+The menu: 1 Mine SUMO, 2 Check balance, 3 Get test SOL, 4 Set payout address,
+5 Withdraw SOL, 6 Exit. After anything except mining, you come back to the menu.
+To stop mining, press Ctrl+C or close the window. If Windows asks
+"Terminate batch job (Y/N)?", type N to go back to the menu, or Y to close.
 
 This zip is already set to the public Solana devnet. No settings to edit.
 Never put a real wallet, seed phrase or private key anywhere.

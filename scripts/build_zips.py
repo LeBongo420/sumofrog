@@ -9,7 +9,8 @@ Usage: python3 scripts/build_zips.py            (private-chain zip)
        ready sumo_config.json set to public devnet, plus devnet START HERE / HOW TO MINE text)
        python3 scripts/build_zips.py --devnet --candidate   (same, named ...-devnet-candidate.zip,
        so a test build never overwrites a zip people already have)
-The devnet zip is tidy: only START HERE.txt and the buttons (.bat) on top, everything else in files/.
+The devnet zip is tidy: only START HERE.txt and the one launcher (SUMO Frog.bat, a numbered menu) on
+top, everything else in files/.
 The private-chain zip stays flat (no folders).
 """
 import hashlib
@@ -37,15 +38,11 @@ FILES = [
     "sumo_coin.ico",
     "requirements.txt",
 ]
-# Devnet zip layout: (name inside the zip, source under miner/). Top level = what a person clicks;
+# Devnet zip layout: (name inside the zip, source under miner/). Top level = the launcher and START HERE;
 # everything else sits in one folder, files/ (the miner finds its own files next to sumo_miner.py).
 DEVNET_TOP = [
     ("START HERE.txt", "devnet/START HERE.txt"),
-    ("Mine SUMO.bat", "devnet/Mine SUMO.bat"),
-    ("Check balance.bat", "devnet/Check balance.bat"),
-    ("Get test SOL.bat", "devnet/Get test SOL.bat"),
-    ("Set payout address.bat", "devnet/Set payout address.bat"),
-    ("Withdraw SOL.bat", "devnet/Withdraw SOL.bat"),
+    ("SUMO Frog.bat", "devnet/SUMO Frog.bat"),
 ]
 DEVNET_FILES_DIR = "files"
 DEVNET_INNER = [
@@ -180,7 +177,7 @@ def check_devnet_config(data):
 
 
 def build_devnet(candidate=False):
-    """The tidy devnet zip: START HERE.txt + the .bat buttons on top, everything else in files/."""
+    """The tidy devnet zip: START HERE.txt + SUMO Frog.bat on top, everything else in files/."""
     ver = version()
     name = f"sumo-miner-v{ver}-devnet{'-candidate' if candidate else ''}.zip"
     dest_dir = os.path.join(ROOT, "docs", "downloads")
@@ -205,7 +202,7 @@ def build_devnet(candidate=False):
         names = z.namelist()
         top = [n for n in names if "/" not in n]
         if sorted(top) != sorted(a for a, _ in DEVNET_TOP):
-            raise SystemExit(f"devnet zip top level is not just the buttons: {top}")
+            raise SystemExit(f"devnet zip top level is not just START HERE.txt and SUMO Frog.bat: {top}")
         if any(n.count("/") > 1 or not n.startswith(DEVNET_FILES_DIR + "/") for n in names if "/" in n):
             raise SystemExit("devnet zip has a folder other than files/")
         if f"{DEVNET_FILES_DIR}/sumo_config.json" not in names or any("example" in n for n in names):
