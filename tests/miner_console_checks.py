@@ -324,4 +324,71 @@ if os.name != "nt" and os.path.isdir("/proc"):
 else:
     ok("hard-kill worker check skipped (needs /proc)", True)
 
+# ---- Review (2nd) Low 1: web errors show the code and reason, never the server address ----
+import http.server  # noqa: E402
+import socket  # noqa: E402
+import threading  # noqa: E402
+import urllib.error  # noqa: E402
+import urllib.request  # noqa: E402
+
+
+class Always429(http.server.BaseHTTPRequestHandler):
+    def do_POST(self):
+        self.send_response(429, "Too Many Requests")
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    do_GET = do_POST
+
+    def log_message(self, *a):
+        pass
+
+
+httpd = http.server.HTTPServer(("127.0.0.1", 0), Always429)
+PORT = httpd.server_address[1]
+threading.Thread(target=httpd.serve_forever, daemon=True).start()
+try:
+    urllib.request.urlopen(f"http://127.0.0.1:{PORT}/secret-path")
+except urllib.error.HTTPError as err:
+    text = m.friendly_error(err)
+ok("HTTPError: code and reason only", text == "HTTP 429 Too Many Requests")
+ok("HTTPError: no host, port, IP or path", all(x not in text for x in ("127.0.0.1", str(PORT), "localhost", "secret-path")))
+sock = socket.socket()
+sock.bind(("127.0.0.1", 0))
+DEAD_PORT = sock.getsockname()[1]
+sock.close()  # nothing listens here now
+try:
+    urllib.request.urlopen(f"http://127.0.0.1:{DEAD_PORT}/")
+except urllib.error.URLError as err:
+    text = m.friendly_error(err)
+ok("URLError (connection refused): the reason is shown", "refused" in text.lower())
+ok("URLError: no host, port or IP", all(x not in text for x in ("127.0.0.1", str(DEAD_PORT), "localhost")))
+for reason in ("[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed for 'rpc.example-host.org:8899'",
+               "[Errno -2] Name or service not known 203.0.113.7:8080 via 2001:db8::1",
+               "timed out connecting to http://203.0.113.9:8080 and [2001:db8::1]:8080"):
+    text = m.friendly_error(urllib.error.URLError(reason))
+    ok("URLError reasons with a host name, IPv4 or IPv6 address are cleaned",
+       not any(x in text for x in ("example-host", "203.0.113", "2001:db8", "8899", "8080")))
+text = m.friendly_error(RuntimeError("bad answer from 203.0.113.9:8080 in C:\\Users\\JoshSmith\\x\\k.json"))
+ok("other errors lose server addresses and paths too", "203.0.113" not in text and "8080" not in text and "JoshSmith" not in text)
+
+# the same, end to end through main(): 429 after the miner's own retries, and connection refused
+NET = r"""
+import sys, time
+sys.path.insert(0, %(miner)r)
+import sumo_miner as m
+time.sleep = lambda s: None  # skip the miner's retry waits
+m.load_settings = lambda: {"rpc": %(url)r, "program_id": "x", "config": "x", "mint": "x"}
+sys.argv = ["sumo_miner.py", "status"]
+m.main()
+"""
+for label, url, expect in (("429", f"http://127.0.0.1:{PORT}", "HTTP 429 Too Many Requests"),
+                           ("connection refused", f"http://127.0.0.1:{DEAD_PORT}", "refused")):
+    r = subprocess.run([sys.executable, "-c", NET % {"miner": MINER, "url": url}], capture_output=True, text=True, timeout=60)
+    shown = r.stdout + r.stderr
+    ok(f"main(), {label}: friendly one-line reason, exit 1", r.returncode == 1 and expect.lower() in shown.lower()
+       and "Traceback" not in shown)
+    ok(f"main(), {label}: no host, port or IP on screen", all(x not in shown for x in ("127.0.0.1", str(PORT), str(DEAD_PORT), "localhost")))
+httpd.shutdown()
+
 print(f"miner console checks: {passed} passed")

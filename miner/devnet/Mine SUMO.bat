@@ -32,7 +32,7 @@ exit /b 1
 
 :stopsafe
 echo.
-echo Stopped on purpose: nothing was changed and no new wallet was made.
+echo Stopped on purpose. No new wallet was made.
 echo If it says Two wallets found above, do not delete sumo-devnet-key.json. It holds your test SUMO.
 pause
 exit /b 2

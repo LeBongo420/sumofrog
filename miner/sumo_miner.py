@@ -35,6 +35,7 @@ import signal
 import struct
 import sys
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 
@@ -1122,14 +1123,32 @@ def scrub_paths(text):
     return text
 
 
+_IPV4 = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}(?::\d+)?\b")
+_IPV6 = re.compile(r"\[[0-9A-Fa-f:.]{2,}\](?::\d+)?")
+_IPV6_BARE = re.compile(r"(?<![0-9A-Fa-f:])(?:(?:[0-9A-Fa-f]{1,4}:){7}[0-9A-Fa-f]{1,4}|"
+                        r"(?:[0-9A-Fa-f]{1,4}:){1,7}:(?:[0-9A-Fa-f]{1,4})?(?::[0-9A-Fa-f]{1,4}){0,6})(?![0-9A-Fa-f:])")
+_HOST = re.compile(r"\b(?:[A-Za-z0-9-]+\.)+[A-Za-z]{2,}(?::\d+)?\b")
+
+
+def scrub_network(text, hostnames=False):
+    """Hide server addresses (IP:port, [IPv6]:port and, if asked, host names) from a message."""
+    text = _IPV4.sub("<server>", _IPV6_BARE.sub("<server>", _IPV6.sub("<server>", str(text))))
+    return _HOST.sub("<server>", text) if hostnames else text
+
+
 def friendly_error(e):
-    """One short line for an unexpected error. File errors show only the file's own name and the
-    reason (never the folder, so never the Windows user name); anything else is path-scrubbed."""
+    """One short line for an unexpected error, with no folder names, user name or server address.
+    Web errors: the code and reason only. Real file errors: only the file's own name and the reason.
+    Anything else is path- and address-scrubbed."""
+    if isinstance(e, urllib.error.HTTPError):  # its .filename is the URL: never show it
+        return f"HTTP {e.code} {scrub_network(scrub_paths(e.reason or ''), True)}".strip()
+    if isinstance(e, urllib.error.URLError):
+        return f"{type(e).__name__}: {scrub_network(scrub_paths(e.reason), True)}"
     if isinstance(e, OSError) and (e.filename or e.filename2):
         names = [os.path.basename(str(n).replace("\\", "/").rstrip("/")) or "?" for n in (e.filename, e.filename2) if n]
         reason = scrub_paths(e.strerror or type(e).__name__)
         return f"{type(e).__name__}: {reason} ({' -> '.join(names)})"
-    return f"{type(e).__name__}: {scrub_paths(e)}"
+    return f"{type(e).__name__}: {scrub_network(scrub_paths(e))}"
 
 
 def main():

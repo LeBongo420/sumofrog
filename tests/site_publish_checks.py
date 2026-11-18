@@ -267,13 +267,23 @@ def main():
     lower = start.lower()
     ok("_start.bat warns 'two wallets found' and tells people not to delete the wallet",
        "TWO WALLETS FOUND" in start and "DON'T DELETE sumo-devnet-key.json" in start)
-    ok("_start.bat stops with exit code 2 when a wallet is still next to the buttons",
-       ":two_wallets" in start and "exit /b 2" in start
-       and 'if exist "%~dp0..\\sumo-devnet-key.json" goto two_wallets' in start)
-    ok("_start.bat never copies or deletes a wallet: only moves, only if the target is missing",
-       "copy " not in lower and "del " not in lower and "erase" not in lower and "rmdir" not in lower
-       and start.count("if not exist") >= 2)
-    ok("_start.bat says no new wallet was made", "No new wallet has been made" in start)
+    two = 'if exist "%~dp0..\\sumo-devnet-key.json" if exist "%~dp0sumo-devnet-key.json" goto two_wallets'
+    first_move = start.index('move "')
+    ok("_start.bat checks for two wallets (and two payout files) BEFORE moving anything",
+       two in start and start.index(two) < first_move
+       and "goto two_payouts" in start and start.index("goto two_payouts") < first_move)
+    ok("_start.bat stops with exit code 2 in every stop case",
+       all(f":{lab}" in start for lab in ("two_wallets", "wallet_move_failed", "two_payouts", "payout_move_failed"))
+       and start.count("exit /b 2") == 4)
+    ok("_start.bat checks the wallet really moved before doing anything else",
+       'if exist "%~dp0..\\sumo-devnet-key.json" goto wallet_move_failed' in start
+       and start.index("goto wallet_move_failed") < start.index("call "))
+    cmds = [l for l in start.splitlines() if not l.lower().startswith(("rem", "echo"))]
+    ok("_start.bat only ever runs 'move' on the wallet and payout files: no copy, delete or overwrite",
+       sum('move "' in l for l in cmds) == 2
+       and not any(w in l.lower() for l in cmds for w in ("copy ", " del ", "erase", "rmdir", "move /y", "xcopy")))
+    ok("_start.bat says no wallet was moved or made when it stops on two wallets",
+       "No wallet was moved or made" in start and "Nothing was changed" not in start)
     ok("Mine SUMO.bat stops safely on the two-wallet case and never makes a wallet then",
        "if errorlevel 2 goto stopsafe" in mine and ":stopsafe" in mine
        and mine.index("goto stopsafe") < mine.index("new-key")
