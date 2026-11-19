@@ -1219,10 +1219,17 @@ ok("retry_wait stops with an error when its thread's stop flag is set, and just 
 ok("workers start only after quiet console input is on",
    gsrc.index("with quiet_console_input():") < gsrc.index("p.start()"))
 
-# Ctrl+C while a mined block is being sent: say so, and count it as not settled
+# Ctrl+C while a mined block is being sent: say so only once the send has started, and only for that block
+import contextlib  # noqa: E402
+import io  # noqa: E402
+
+
 class SendChain:
     cluster, unencrypted = "devnet", False
     program = config = mint = Keypair().pubkey()
+
+    def __init__(self, outcomes):
+        self.outcomes = list(outcomes)   # per block: "ok", "refused", "stop" (flag set), "early" (flag not set)
 
     def state(self):
         return dict(next_reward=20 * 10**9, blocks_mined=0, target=1, blocks_to_halving=5, challenge=bytes(32))
@@ -1231,23 +1238,134 @@ class SendChain:
     def sumo_units(self, pk): return 0
 
     def submit(self, *a):
-        raise KeyboardInterrupt
+        what = self.outcomes.pop(0)
+        if what != "early":
+            m.send_started.set()   # what Rpc.call does when it hands the transaction to the network
+        if what == "refused":
+            raise m.RpcError({"message": "x", "data": {"err": {"InstructionError": [0, {"Custom": 6002}]}}})
+        if what in ("stop", "early"):
+            raise KeyboardInterrupt
 
 
-real = (m.Chain, m.load_key, m.saved_payout, m.grind)
-m.Chain, m.load_key, m.saved_payout = (lambda s: SendChain()), (lambda path: Keypair()), (lambda s: None)
-m.grind = lambda chain, earner, st, workers, on_tick: (7, 100, 2.0)
-import contextlib  # noqa: E402
-import io  # noqa: E402
-buf = io.StringIO()
-try:
-    with contextlib.redirect_stdout(buf):
-        m.cmd_mine(types.SimpleNamespace(keypair="x", payout=None, blocks=0, workers=1, plain=True), {})
-finally:
-    m.Chain, m.load_key, m.saved_payout, m.grind = real
+def mine_text(outcomes, grind_stops_after=None):
+    """Run cmd_mine over one block per outcome; grind itself raises Ctrl+C after `grind_stops_after` blocks."""
+    real = (m.Chain, m.load_key, m.saved_payout, m.grind, m.flush_console_input)
+    chain, calls = SendChain(outcomes), []
+
+    def fake_grind(c, earner, st, workers, on_tick):
+        calls.append(1)
+        if grind_stops_after is not None and len(calls) > grind_stops_after:
+            raise KeyboardInterrupt
+        return 7, 100, 2.0
+    m.Chain, m.load_key, m.saved_payout = (lambda s: chain), (lambda path: Keypair()), (lambda s: None)
+    m.grind = fake_grind
+    buf = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(buf):
+            m.cmd_mine(types.SimpleNamespace(keypair="x", payout=None, blocks=0, workers=1, plain=True), {})
+    finally:
+        m.Chain, m.load_key, m.saved_payout, m.grind, m.flush_console_input = real
+    return buf.getvalue()
+
+
+out = mine_text(["stop"])
 ok("mining: Ctrl+C while a found block is being sent says it may still go through and to check the balance",
-   "Stopped while sending. It may still go through. Check balance" in buf.getvalue()
-   and "The last block was being sent" in buf.getvalue())
+   "Stopped while sending. It may still go through. Check balance" in out and "The last block was being sent" in out)
+out = mine_text(["early"])
+ok("mining: Ctrl+C before the send started does not say 'may still go through'", "may still go through" not in out)
+for first in ("ok", "refused"):
+    out = mine_text([first, "early"])
+    ok(f"mining: after a {'confirmed' if first == 'ok' else 'refused'} block, a later stop before sending says nothing about sending (the flag is cleared per block)",
+       "may still go through" not in out)
+    out = mine_text([first], grind_stops_after=1)
+    ok(f"mining: a normal stop after a {'confirmed' if first == 'ok' else 'refused'} block does not say a block was being sent",
+       "may still go through" not in out and "being sent" not in out)
+
+# retry cut-off: each branch on its own, and only in the thread that asked for it
+import urllib.error  # noqa: E402
+
+
+def retries_with(exc, cancel):
+    """Run one Rpc.call whose every attempt fails with exc; returns (attempts, what was raised)."""
+    real_open, real_sleep, attempts, waits = m.open_url, m.time.sleep, [], []
+
+    def failing(req, timeout):
+        attempts.append(1)
+        raise exc
+    m.open_url, m.time.sleep = failing, waits.append
+    if cancel:
+        flag = _threading.Event()
+        flag.set()
+        m._cancel.event = flag
+    try:
+        try:
+            m.Rpc("https://example.invalid").call("getHealth")
+            raised = None
+        except BaseException as e:   # noqa: BLE001
+            raised = e
+    finally:
+        m.open_url, m.time.sleep = real_open, real_sleep
+        if cancel:
+            del m._cancel.event
+    return len(attempts), raised, waits
+
+
+http500 = urllib.error.HTTPError("https://example.invalid", 500, "boom", {}, None)
+m.grind(SlowChain(challenge=b"\x01" * 32, delay=0), Keypair().pubkey(), dict(challenge=bytes(32), target=1), 1,
+        lambda h, r: None, poll_secs=0.05)   # a grind has run: its watch thread has set and finished with its stop flag
+_threading.Event().wait(0.3)
+n, raised, waits = retries_with(http500, cancel=False)
+ok("retry cut-off is per thread: right after a grind has run, the main thread's retries are unchanged (5 tries, waits 2, 4, 6, 8)",
+   n == 5 and raised is http500 and waits == [2, 4, 6, 8])
+for label, exc in (("HTTP error branch", http500), ("other error branch", ConnectionError("down"))):
+    n, raised, waits = retries_with(exc, cancel=True)
+    ok(f"retry cut-off: the {label} stops after the first failed attempt when its thread is told to stop",
+       n == 1 and isinstance(raised, RuntimeError) and waits == [])
+    n, raised, waits = retries_with(exc, cancel=False)
+    ok(f"retry cut-off: with no stop flag the {label} still does all 5 tries with waits 2, 4, 6, 8",
+       n == 5 and raised is exc and waits == [2, 4, 6, 8])
+ok("retry cut-off is per thread: after grind has run (its stop flag set), the main thread's retries are unchanged",
+   getattr(m._cancel, "event", None) is None)
+
+# a worker that fails to start: the ones already started are stopped, and nothing unstarted is joined
+real_proc, started, joined = m.mp.Process, [], []
+
+
+class FlakyProc:
+    n = 0
+
+    def __init__(self, *a, **k):
+        FlakyProc.n += 1
+        self.mine, self.pid, self.alive = FlakyProc.n, None, False
+
+    def start(self):
+        if self.mine == 2:
+            raise OSError("cannot start a worker")
+        self.pid, self.alive = 1000 + self.mine, True
+        started.append(self)
+
+    def join(self, timeout=None):
+        assert self.pid is not None, "joined a worker that never started"
+        joined.append(self)
+
+    def is_alive(self):
+        return self.alive
+
+    def terminate(self):
+        self.alive = False
+
+
+m.mp.Process = FlakyProc
+try:
+    try:
+        m.grind(SlowChain(delay=0), Keypair().pubkey(), dict(challenge=bytes(32), target=1), 3, lambda h, r: None, poll_secs=60)
+        failed = None
+    except OSError as e:
+        failed = e
+finally:
+    m.mp.Process = real_proc
+ok("a worker that fails to start: the error comes out, the already-started worker is joined and stopped, the others are skipped",
+   failed is not None and len(started) == 1 and joined == started and not started[0].alive)
 
 
 print(f"miner console checks: {passed} passed")

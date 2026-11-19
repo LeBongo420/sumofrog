@@ -416,15 +416,45 @@ m.withdraw_destination = lambda args, settings, kp, chain: (WALLET, None)
 m._account, m._fee = (lambda chain, pk: None), (lambda chain, kp, ixs: 5000)
 
 
+wd_run = lambda: scripted([], m.cmd_withdraw, types.SimpleNamespace(  # noqa: E731
+    address=None, yes=True, sumo=False, keypair="x", plain=True), S)
+
+
 def interrupted_send(chain, kp, ixs):
+    m.send_started.set()    # what Rpc.call does when it hands the transaction to the network
     raise KeyboardInterrupt
+
+
+def interrupted_early(chain, kp, ixs):
+    raise KeyboardInterrupt   # before anything was signed or sent
+
+
+def interrupted_after(chain, kp, ixs):
+    return "SIG123"
+
+
 m._send = interrupted_send
 try:
-    res, shown, left = scripted([], m.cmd_withdraw, types.SimpleNamespace(
-        address=None, yes=True, sumo=False, keypair="x", plain=True), S)
+    res, shown, left = wd_run()
     ok("withdraw: Ctrl+C while the send is in flight says it may still go through and to check the balance (not 'Nothing is lost')",
        res[0] == "EXIT" and "Stopped while sending. It may still go through. Check balance" in res[1]
        and "Nothing is lost" not in res[1])
+    m._send = interrupted_early
+    res, shown, left = wd_run()
+    ok("withdraw: Ctrl+C before anything was signed or sent says nothing was sent (no 'may still go through')",
+       res == ("EXIT", m.STOPPED_BEFORE) and "may still go through" not in res[1])
+    m._send = interrupted_after
+    real_balance = WdChain.sol_balance
+
+    def ctrl_c_balance(self, pk):
+        raise KeyboardInterrupt
+    WdChain.sol_balance = ctrl_c_balance
+    try:
+        res, shown, left = wd_run()
+    finally:
+        WdChain.sol_balance = real_balance
+    ok("withdraw: Ctrl+C right after the coins were sent says 'Done, the coins were sent' with the transaction, not 'start mining again'",
+       res == ("EXIT", "\nDone, the coins were sent. Transaction SIG123") and "*** SENT" in shown)
 finally:
     m.Chain, m.load_key, m.withdraw_destination, m._account, m._fee, m._send = saved
 

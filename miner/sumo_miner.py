@@ -542,6 +542,7 @@ def open_url(req, timeout):
     return _OPENER.open(req, timeout=timeout)
 
 
+send_started = threading.Event()   # set the moment a transaction is handed to the network (see Rpc.call)
 _cancel = threading.local()   # grind's watch thread sets .event; its retry waits then end early
 
 
@@ -558,6 +559,8 @@ class Rpc:
         self.url = url
 
     def call(self, method, *params):
+        if method == "sendTransaction":
+            send_started.set()
         body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": list(params)}).encode()
         for attempt in range(5):
             try:
@@ -889,6 +892,7 @@ TOKEN_ACCOUNT_SIZE = 165
 
 
 STOPPED_SENDING = "\nStopped while sending. It may still go through. Check balance (menu 2) before trying again."
+STOPPED_BEFORE = "\nStopped before anything was sent."
 
 
 def _system_transfer(src, dst, lamports):
@@ -1028,15 +1032,19 @@ def cmd_withdraw(args, settings):
             sys.exit("Not sent (add --yes to send without asking).")
         if input("Send now? [y/N] ").strip().lower() not in ("y", "yes"):
             sys.exit("Not sent.")
+    send_started.clear()
     try:
         sig = _send(chain, kp, ixs)
     except KeyboardInterrupt:
-        sys.exit(STOPPED_SENDING)
+        sys.exit(STOPPED_SENDING if send_started.is_set() else STOPPED_BEFORE)
     except RpcError as e:
         sys.exit(f"!! The network refused it: {e}. Nothing was sent.")
-    print(f"\n*** SENT. Transaction {sig}")
-    print(f"Destination now has {chain.sol_balance(dest):.6f} test SOL.")
-    print("To mine again on this PC, get some test SOL for fees first.")
+    try:
+        print(f"\n*** SENT. Transaction {sig}")
+        print(f"Destination now has {chain.sol_balance(dest):.6f} test SOL.")
+        print("To mine again on this PC, get some test SOL for fees first.")
+    except KeyboardInterrupt:
+        sys.exit(f"\nDone, the coins were sent. Transaction {sig}")
 
 
 # ======================= hashing workers =======================
@@ -1094,12 +1102,12 @@ def grind(chain, earner, st, workers, on_tick, poll_secs=5):
             except (Exception, SystemExit):
                 pass
     # quiet input from before the workers start, only while hashing: start-up and network waits keep a normal Ctrl+C
+    t0 = time.time()
     with quiet_console_input():
-        for p in procs:
-            p.start()
-        t0 = time.time()
-        threading.Thread(target=watch, daemon=True).start()
         try:
+            for p in procs:
+                p.start()
+            threading.Thread(target=watch, daemon=True).start()
             while not moved.is_set():
                 try:
                     result = found.get(timeout=0.4)
@@ -1114,6 +1122,8 @@ def grind(chain, earner, st, workers, on_tick, poll_secs=5):
             done.set()
             stop.set()
             for p in procs:
+                if p.pid is None:  # never started (a worker failed to start)
+                    continue
                 p.join(timeout=2)
                 if p.is_alive():
                     p.terminate()
@@ -1181,12 +1191,13 @@ def cmd_mine(args, settings):
             if guess == "moved" or guess is None:
                 scr.event(f"Block #{fmt_int(st['blocks_mined'] + 1)} went to another frog. On to the next one.")
                 continue
-            sending = True
+            send_started.clear()
             try:
                 chain.submit(kp, st["challenge"], guess, payout)
-                sending = False
+            except KeyboardInterrupt:
+                sending = send_started.is_set()
+                raise
             except RpcError as e:
-                sending = False
                 code = e.custom_code()
                 if code == 6002:
                     scr.event("Another miner got there first. On to the next block.")
