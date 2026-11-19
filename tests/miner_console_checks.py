@@ -480,6 +480,12 @@ class FakeRpc(http.server.BaseHTTPRequestHandler):
         if FakeRpc.mode == "hang":
             time.sleep(8)
             return
+        if FakeRpc.mode == "redirect":
+            self.send_response(302)
+            self.send_header("Location", f"http://127.0.0.1:{self.server.server_address[1]}/followed")
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
         if req.get("method") == "getGenesisHash":
             body = {"jsonrpc": "2.0", "id": 1, "result": FakeRpc.genesis}
         elif FakeRpc.mode == "missing":
@@ -619,15 +625,15 @@ ok("menu: never asks a link that isn't this computer, public devnet or the shipp
 
 # Low 1: the menu follows check_devnet's link rules, and a refused link gets no request at all
 sent = []
-real_urlopen = m.urllib.request.urlopen
+real_open = m._OPENER.open
 
 
-def spy_urlopen(req, *a, **k):
+def spy_open(req, *a, **k):
     sent.append(getattr(req, "full_url", str(req)))
-    return real_urlopen(req, *a, **k)
+    return real_open(req, *a, **k)
 
 
-m.urllib.request.urlopen = spy_urlopen
+m._OPENER.open = spy_open
 PRIVATE = "http://private-test.invalid:8899"
 refusals = (
     ("http (unencrypted) devnet link", dict(SET, rpc="http://evil.example/rpc")),
@@ -638,7 +644,25 @@ refusals = (
                                                                   _shipped_rpc=PRIVATE, private_genesis="G" * 43)),
     ("not a web link", dict(SET, rpc="ftp://x.example/rpc")),
     ("empty link", dict(SET, rpc="")),
+    ("https link with private_genesis set that is not the shipped private link",
+     dict(SET, network="private", rpc="https://other.example/rpc", _shipped_rpc=PRIVATE, private_genesis="G" * 43)),
+    ("https link equal to the shipped link but private_genesis not set", dict(SET, network="private", rpc="https://x.example/rpc",
+                                                                                _shipped_rpc="https://x.example/rpc")),
 )
+# the tricky spellings (userinfo, case, port, path, query, lookalike hosts, 0.0.0.0, IPv6, backslash, ...)
+TRICKY = (
+    "https://api.devnet.solana.com@evil.example", "https://api.devnet.solana.com:x@evil.example",
+    "https://api.devnet.solana.com\\@evil.example", "http://evil.com\\@localhost", "http://localhost\\@evil.com",
+    "https://api.devnet.solana.com\\", "http://127.0.0.1\\.evil.com",
+    "HTTPS://api.devnet.solana.com", "https://API.DEVNET.SOLANA.COM", "https://api.devnet.solana.com/",
+    "https://api.devnet.solana.com:443", "https://api.devnet.solana.com:8899", "https://api.devnet.solana.com/path",
+    "https://api.devnet.solana.com?x=1", "https://api.devnet.solana.com#frag", " https://api.devnet.solana.com",
+    "https://api.devnet.solana.com.evil.example", "https://evilapi.devnet.solana.com",
+    "http://localhost.evil.com", "https://localhost.evil.com", "http://localhost@evil.com", "http://evil.com#@localhost",
+    "http://user@localhost:8999", "http://localhost.", "http://0.0.0.0:8999", "https://0.0.0.0:8999",
+    "http://[2001:db8::1]:8999", "https://[2001:db8::1]/", "http://[::ffff:127.0.0.1]:8999", "ftp://localhost", "file:///etc/passwd",
+)
+refusals += tuple((f"tricky link {link!r}", dict(SET, rpc=link)) for link in TRICKY)
 for label, st in refusals:
     sent.clear()
     FakeRpc.hits.clear()
@@ -662,7 +686,75 @@ FakeRpc.genesis = m.MAINNET_GENESIS
 ok("menu: a chain whose genesis hash is mainnet -> 'offline', the wallet is never asked about",
    "offline" in visible_rows(m.menu_text(SET, KEYFILE, 100, 30))[15] and FakeRpc.methods == ["getGenesisHash"])
 FakeRpc.genesis = m.DEVNET_GENESIS
-m.urllib.request.urlopen = real_urlopen
+
+# Note 2: off this computer (the shipped private link) only the private_genesis answer is accepted, never devnet's
+PG = "P" * 43
+PRIV = dict(SET, network="private", rpc=PRIVATE, _shipped_rpc=PRIVATE, private_genesis=PG)
+real_post = m.menu_post
+answers = {}
+m.menu_post = lambda url, method, params, timeout: {"result": answers["g"]}
+for label, answer, want in (("the private network's own genesis hash", PG, True), ("devnet's genesis hash", m.DEVNET_GENESIS, False),
+                            ("mainnet's genesis hash", m.MAINNET_GENESIS, False), ("something unknown", "U" * 43, False),
+                            ("no answer at all", None, False)):
+    answers["g"] = answer
+    ok(f"Note 2: shipped private link answering {label} -> {'accepted' if want else 'refused'}", m.menu_chain_ok(PRIV, 1) is want)
+answers["g"] = m.DEVNET_GENESIS
+ok("Note 2: devnet's answer is also refused without any private_genesis set", m.menu_chain_ok(dict(PRIV, private_genesis=None), 1) is False)
+answers["g"] = m.MAINNET_GENESIS
+ok("Note 2: this computer answering mainnet is still refused, any other answer on this computer is fine",
+   m.menu_chain_ok(SET, 1) is False and (answers.update(g="L" * 43) or m.menu_chain_ok(SET, 1) is True))
+m.menu_post = real_post
+ok("Note 2: the genesis rule matches check_devnet (private_genesis only off this computer)",
+   "genesis == settings[\"private_genesis\"]" in menu_fn_src and "DEVNET_GENESIS" not in menu_fn_src)
+
+# Note 3: backslashes and user-name parts in links are refused by the shared rule; redirects are never followed
+for link in ("https://api.devnet.solana.com@evil.example", "http://localhost@evil.com", "http://user@localhost:8999",
+             "http://evil.com\\@localhost", "https://x.example\\y", "http://127.0.0.1:8999\\"):
+    ok(f"Note 3: link_problem refuses {link!r}, and it is not 'this computer'", m.link_problem(link, {"_shipped_rpc": link, "private_genesis": "x"}) is not None
+       and not m.is_local_url(link))
+ok("Note 3: plain good links still pass link_problem", m.link_problem("https://api.devnet.solana.com", {}) is None
+   and m.link_problem("http://localhost:8899", {}) is None and m.link_problem("http://[::1]:8899", {}) is None
+   and m.link_problem(PRIVATE, {"_shipped_rpc": PRIVATE, "private_genesis": "x"}) is None)
+
+
+class NoRequest:
+    def call(self, *a):
+        raise AssertionError("a request was sent")
+
+
+for link in ("https://api.devnet.solana.com@evil.example", "http://evil.com\\@localhost", "http://user@localhost:8999"):
+    try:
+        m.check_devnet(NoRequest(), link, {})
+        stopped = False
+    except SystemExit:
+        stopped = True
+    ok(f"Note 3: check_devnet stops on {link!r} before sending any request", stopped)
+
+FakeRpc.mode = "redirect"
+FakeRpc.hits.clear()
+sent.clear()
+try:
+    m.open_url(m.urllib.request.Request(RPC, b"{}", {"Content-Type": "application/json"}), 5)
+    followed = True
+except m.urllib.error.HTTPError as e:
+    followed = e.code != 302
+ok("Note 3: a redirect is refused by the shared opener (an error, not followed)", followed is False and "/followed" not in FakeRpc.hits)
+real_sleep = m.time.sleep
+m.time.sleep = lambda x: None
+try:
+    m.Rpc(RPC).call("getGenesisHash")
+    rpc_ok = True
+except Exception:
+    rpc_ok = False
+m.time.sleep = real_sleep
+ok("Note 3: Rpc.call (used by every command) fails on a redirect and never requests the other address", rpc_ok is False and "/followed" not in FakeRpc.hits)
+FakeRpc.hits.clear()
+FakeRpc.genesis = m.DEVNET_GENESIS
+ok("Note 3: the menu shows 'offline' on a redirect and never requests the other address",
+   m.menu_balance(SET, kp.pubkey()) is None and "/followed" not in FakeRpc.hits and FakeRpc.hits)
+ok("Note 3: every network call goes through open_url (no bare urlopen left in the miner)", "urlopen(" not in msrc.replace("_OPENER.open", ""))
+FakeRpc.mode = "balance"
+m._OPENER.open = real_open
 
 # Note 2: a slow-drip server (one byte a second, so the 2.5 s socket timeout never fires) needs the hard thread limit
 FakeRpc.mode = "drip"
@@ -696,6 +788,27 @@ with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
 ok("Note 1: Ctrl+C inside the menu -> exit code 1, nothing printed", code == 1 and out.getvalue() == "" and err.getvalue() == "")
 m.menu_text = real_menu_text
 m.enable_colour = real_enable
+
+# Note 1: Ctrl+C at the very start (before cmd_menu runs): main() exits 1 silently for the menu command only
+real__main = m._main
+real_argv = sys.argv
+m._main = interrupted
+for argv, want_code, want_text in ((["sumo_miner.py", "menu"], 1, False), (["sumo_miner.py", "balance"], None, True)):
+    sys.argv = argv
+    out, err = io.StringIO(), io.StringIO()
+    code = "none"
+    with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+        try:
+            m.main()
+            code = None
+        except SystemExit as e:
+            code = e.code
+    ok(f"Note 1: Ctrl+C at start-up of '{argv[1]}' -> " + ("exit 1, nothing printed (plain menu)" if argv[1] == "menu"
+                                                          else "the friendly 'Stopped (Ctrl+C)' line, as before"),
+       code == want_code and (("Stopped (Ctrl+C)" in out.getvalue()) is want_text) and err.getvalue() == ""
+       and (want_text or out.getvalue() == ""))
+m._main = real__main
+sys.argv = real_argv
 ok("menu fallback: window narrower than 80 columns (or shorter than 30 rows) -> None, so the launcher shows the plain menu",
    m.menu_text(SET, KEYFILE, 79, 40) is None and m.menu_text(SET, KEYFILE, 120, 29) is None and m.menu_text(SET, KEYFILE, 0, 0) is None
    and m.menu_text(SET, KEYFILE, 80, 30) is not None)

@@ -430,9 +430,20 @@ def secs_text(el):
     return f"{el:.1f}s" if el < 10 else f"{el:.0f}s"
 
 
+def has_odd_authority(url):
+    """True for a link with a backslash anywhere or a user name part (name@host): Python's link reader and
+    the network code can read such links differently, so the miner refuses them."""
+    try:
+        return "\\" in url or "@" in urllib.parse.urlsplit(url).netloc
+    except ValueError:
+        return True
+
+
 def is_local_url(url):
     """True only when the link's host is exactly this computer (not just containing 'localhost')."""
     try:
+        if has_odd_authority(url):
+            return False
         return (urllib.parse.urlsplit(url).hostname or "").lower() in LOCAL_HOSTS
     except ValueError:
         return False
@@ -445,6 +456,20 @@ def url_scheme(url):
         return ""
 
 
+class NoRedirect(urllib.request.HTTPRedirectHandler):
+    """A server that answers "go to another address" is treated as a failure, never followed."""
+    def redirect_request(self, *args, **kwargs):
+        return None
+
+
+_OPENER = urllib.request.build_opener(NoRedirect)
+
+
+def open_url(req, timeout):
+    """The one way every network request in the miner is opened (redirects are refused)."""
+    return _OPENER.open(req, timeout=timeout)
+
+
 class Rpc:
     def __init__(self, url):
         self.url = url
@@ -454,7 +479,7 @@ class Rpc:
         for attempt in range(5):
             try:
                 req = urllib.request.Request(self.url, body, {"Content-Type": "application/json"})
-                with urllib.request.urlopen(req, timeout=30) as r:
+                with open_url(req, 30) as r:
                     out = json.load(r)
                 break
             except Exception:  # network blips / 429s on the public RPC
@@ -486,6 +511,8 @@ def link_problem(url, settings):
     scheme, local = url_scheme(url), is_local_url(url)
     if scheme not in ("http", "https"):
         return "The network link must start with https:// . Stopping."
+    if has_odd_authority(url):
+        return "That network link has a backslash or a user name part (name@) in it. Use a plain https:// link. Stopping."
     plain_http_ok = local or (url == settings.get("_shipped_rpc") and settings.get("private_genesis"))
     if scheme == "http" and not plain_http_ok:
         return "That network link isn't encrypted (http). Use an https:// link. Stopping."
@@ -1071,13 +1098,14 @@ def menu_rpc_allowed(settings):
 def menu_post(url, method, params, timeout):
     body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
     req = urllib.request.Request(url, body, {"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
+    with open_url(req, timeout) as r:
         return json.loads(r.read(65536))
 
 
 def menu_chain_ok(settings, timeout):
     """Never ask about the wallet on mainnet. Public devnet is known by its exact link; this computer and the
-    private link are asked for their genesis hash first (no wallet details in that request)."""
+    private link are asked for their genesis hash first (no wallet details in that request); off this computer
+    only the private network's own genesis hash is accepted, as in check_devnet."""
     url = settings["rpc"]
     if url == MENU_DEVNET_RPC:
         return True
@@ -1086,7 +1114,8 @@ def menu_chain_ok(settings, timeout):
         return False
     if is_local_url(url):
         return True
-    return genesis in (DEVNET_GENESIS, settings.get("private_genesis"))
+    # Off this computer only the private network is allowed (check_devnet refuses plain http to anything else).
+    return bool(settings.get("private_genesis")) and genesis == settings["private_genesis"]
 
 
 def menu_balance(settings, owner, timeout=MENU_RPC_TIMEOUT):
