@@ -22,6 +22,7 @@ The reward address is the miner's own wallet, or the payout address you set. A p
 a PUBLIC address only. Never type a seed phrase or private key into this miner (or anything else).
 """
 import argparse
+import atexit
 import base64
 import hashlib
 import json
@@ -187,11 +188,13 @@ def stop_requested(scr, hud):
 class quiet_console_input:
     """Context manager: stdin is a real Windows console -> QuickEdit, mouse, echo, line input and
     Ctrl+C-as-a-signal off (Ctrl+C is read as the key \\x03, see stop_requested), keys discarded; the old
-    mode is restored on exit. Anywhere else it does nothing. `k32` lets the offline checks pass in a fake kernel32."""
+    mode is restored on exit, and also at interpreter exit and on Ctrl+Break / window close, so a killed
+    miner can't leave the window without Ctrl+C or echo. Anywhere else it does nothing. `k32` lets the
+    offline checks pass in a fake kernel32."""
 
     def __init__(self, k32=None):
         self._k32 = k32
-        self._old = None
+        self._old = self._cb = None
 
     def __enter__(self):
         import ctypes
@@ -208,19 +211,40 @@ class quiet_console_input:
             self._old = mode.value
             _input_guard.update(k32=k32, handle=handle)
             flush_console_input()
+            atexit.register(self._restore)
+            try:  # Ctrl+Break, closing the window, logoff, shutdown: put the mode back, then let Windows go on
+                from ctypes import wintypes
+                self._cb = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)(self._on_console_event)
+                k32.SetConsoleCtrlHandler(self._cb, True)
+            except Exception:
+                self._cb = None
         except Exception:
             self._old = None
             _input_guard.update(k32=None, handle=None)
         return self
 
+    def _restore(self):
+        try:
+            k32, handle = _input_guard["k32"], _input_guard["handle"]
+            if self._old is not None and k32 is not None:
+                k32.SetConsoleMode(handle, self._old)
+        except Exception:
+            pass
+
+    def _on_console_event(self, event):
+        self._restore()
+        return False
+
     def __exit__(self, *exc):
         if self._old is not None:
-            k32, handle = _input_guard["k32"], _input_guard["handle"]
-            try:
-                flush_console_input()  # so keys pressed while mining don't leak into "pause"
-                k32.SetConsoleMode(handle, self._old)
-            except Exception:
-                pass
+            flush_console_input()  # so keys pressed while mining don't leak into "pause"
+            self._restore()
+            atexit.unregister(self._restore)
+            if self._cb is not None:
+                try:
+                    _input_guard["k32"].SetConsoleCtrlHandler(self._cb, False)
+                except Exception:
+                    pass
         _input_guard.update(k32=None, handle=None)
         return False
 
@@ -751,13 +775,17 @@ def check_wallet_account(chain, pk, nothing):
     return acct
 
 
+def flush_typed_ahead(k32=None):
+    k32 = k32 or _kernel32()
+    k32.FlushConsoleInputBuffer(k32.GetStdHandle(_STD_INPUT_HANDLE))
+
+
 def ask_line(prompt):
     """input(), after throwing away any key already waiting in the console, so a stray Enter that was
     typed earlier can't answer this question before the person has seen it."""
     if os.name == "nt" and sys.stdin.isatty():
         try:
-            k32 = _kernel32()
-            k32.FlushConsoleInputBuffer(k32.GetStdHandle(_STD_INPUT_HANDLE))
+            flush_typed_ahead()
         except Exception:
             pass
     return input(prompt)
@@ -801,12 +829,20 @@ def saved_payout(settings):
 
 
 def cmd_set_payout(args, settings):
+    chain = None
+    try:  # a refusal of the network itself (mainnet, bad link) stops here, before any question
+        chain = Chain(settings)
+    except Exception:  # offline: SystemExit (a refusal) still stops
+        pass
+
     def check(text):
         if text.strip().lower() in ("none", "off", "self"):
             return "none"
         pk = parse_payout(text, settings)
         try:  # double-check it's a plain wallet, not a token or program account, if we can reach the network
-            check_wallet_account(Chain(settings), pk, "Nothing was saved.")
+            if chain is None:
+                raise OSError("offline")
+            check_wallet_account(chain, pk, "Nothing was saved.")
         except Exception:  # offline or a network hiccup; SystemExit (a refusal) still stops here
             print("(Couldn't reach the test network to double-check the address; the miner checks again when it starts.)")
         return pk
@@ -1030,26 +1066,33 @@ def grind(chain, earner, st, workers, on_tick, poll_secs=5):
              for i in range(workers)]
     for p in procs:
         p.start()
-    t0 = last_poll = time.time()
+    t0 = time.time()
     result = None
-    try:
-        while True:
+    moved, done = threading.Event(), threading.Event()
+
+    def watch():  # in its own thread, so a slow or dead RPC can't make Ctrl+C wait
+        while not done.wait(poll_secs):
             try:
-                result = found.get(timeout=0.4)
-                break
-            except queue.Empty:
+                if chain.state()["challenge"] != st["challenge"]:
+                    moved.set()
+                    return
+            except Exception:
                 pass
-            el = time.time() - t0
-            on_tick(counter.value, counter.value / el if el else 0)
-            if time.time() - last_poll > poll_secs:
-                last_poll = time.time()
+    threading.Thread(target=watch, daemon=True).start()
+    try:  # quiet input only while hashing: start-up and network waits keep a normal, working Ctrl+C
+        with quiet_console_input():
+            while not moved.is_set():
                 try:
-                    if chain.state()["challenge"] != st["challenge"]:
-                        result = "moved"
-                        break
-                except Exception:
+                    result = found.get(timeout=0.4)
+                    break
+                except queue.Empty:
                     pass
+                el = time.time() - t0
+                on_tick(counter.value, counter.value / el if el else 0)
+            else:
+                result = "moved"
     finally:
+        done.set()
         stop.set()
         for p in procs:
             p.join(timeout=2)
@@ -1476,7 +1519,6 @@ def main():
 
 def _main():
     set_window_icon()
-    settings = load_settings()
     # allow_abbrev=False: "--ye" or "--y" must NOT quietly mean "--yes" (which skips the y/N questions).
     ap = argparse.ArgumentParser(description="Sumo Frog miner (test networks only, worthless test coins)",
                                  allow_abbrev=False)
@@ -1493,16 +1535,16 @@ def _main():
     ap.add_argument("--rpc", help="override RPC URL (devnet, localhost or the private Sumo network only)")
     ap.add_argument("--sol", type=float, default=1.0, help="faucet amount in test SOL (max 1)")
     args = ap.parse_args()
+    if args.command == "pick":  # the launcher's menu key: needs no settings, so a missing or broken config can't close the window
+        with quiet_console_input():
+            cmd_pick(args, None)
+    settings = load_settings()
     if args.rpc:
         settings["rpc"] = args.rpc
     run = {"mine": cmd_mine, "status": cmd_status, "balance": cmd_balance, "new-key": cmd_new_key,
            "faucet": cmd_faucet, "set-payout": cmd_set_payout, "withdraw": cmd_withdraw,
-           "menu": cmd_menu, "pick": cmd_pick}[args.command]
-    if args.command in ("mine", "pick"):
-        with quiet_console_input():
-            run(args, settings)
-    else:
-        run(args, settings)
+           "menu": cmd_menu}[args.command]
+    run(args, settings)
 
 
 if __name__ == "__main__":

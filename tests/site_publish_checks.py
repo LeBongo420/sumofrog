@@ -389,6 +389,8 @@ def main():
        all(c < 128 for c in open(os.path.join(miner_dir, "sumo_menu.py"), "rb").read())
        and not [n for n in ast.walk(ast.parse(open(os.path.join(miner_dir, "sumo_menu.py")).read()))
                 if isinstance(n, (ast.Import, ast.ImportFrom))])
+    ok("launcher MINING line says Ctrl+C asks first, and that closing the window works",
+       "echo  ^>^> MINING... press Ctrl+C to stop (it asks first), or close this window." in launcher)
     ok("launcher MINING line escapes both arrows (^>^>)", "echo  ^>^> MINING" in launcher and ">^>" not in launcher.replace("^>^>", ""))
     ok("launcher no longer sends people to menu option 3 for test SOL (faucet.solana.com is the real route)",
        "choose 3" not in launcher and "https://faucet.solana.com" in launcher)

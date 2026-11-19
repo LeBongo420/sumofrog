@@ -30,6 +30,14 @@ def ok(name, cond):
     passed += 1
 
 
+def refused_code(fn, *a):
+    try:
+        fn(*a)
+    except SystemExit as e:
+        return e.code
+    raise AssertionError("did not exit")
+
+
 def refused(fn, *a):
     try:
         fn(*a)
@@ -1015,6 +1023,119 @@ ok("home menu: wrong keys are ignored with no output at all (no bell) and 3 give
 ok("home menu: keys 1 to 6 exit 11 to 16", [run_pick(str(i))[0] for i in range(1, 7)] == [11, 12, 13, 14, 15, 16])
 ok("home menu: Ctrl+C or no input at all exits 16 (Exit), silently", run_pick("\x03")[0] == 16 and run_pick("")[0] == 16
    and run_pick("")[1:] == ("", ""))
+
+
+# ---- 19 Nov (e): the console mode comes back after a kill, Ctrl+Break or window close ----
+class CtrlK32(FakeK32):
+    def __init__(self):
+        super().__init__()
+        self.handlers = []
+
+    def SetConsoleCtrlHandler(self, cb, add):
+        self.handlers.append((cb, add))
+        return 1
+
+
+class FakeAtexit:
+    def __init__(self):
+        self.funcs = []
+
+    def register(self, fn):
+        self.funcs.append(fn)
+
+    def unregister(self, fn):
+        self.funcs = [f for f in self.funcs if f != fn]
+
+
+real_atexit, real_wft = m.atexit, getattr(ctypes, "WINFUNCTYPE", None)
+m.atexit, ctypes.WINFUNCTYPE = FakeAtexit(), ctypes.CFUNCTYPE   # a Windows-only call, stood in for here
+try:
+    k = CtrlK32()
+    with m.quiet_console_input(k):
+        cb = k.handlers[0][0]
+        ok("console handler and exit hook are registered while the guard is on", k.handlers[0][1] is True and len(m.atexit.funcs) == 1)
+        k.mode = 0x1F7 | 0x1000     # pretend something else changed it
+        ok("Ctrl+Break / window close: the handler puts the old mode back and lets Windows carry on (returns False)",
+           not cb(1) and k.mode == 0x1F7)
+        k.mode = 0
+        m.atexit.funcs[0]()
+        ok("a hard exit: the atexit hook puts the old mode back", k.mode == 0x1F7)
+    ok("on a normal exit both hooks are removed again (no pile-up, one per block)",
+       m.atexit.funcs == [] and k.handlers[-1][1] is False and k.mode == 0x1F7)
+    k = FakeK32()   # no SetConsoleCtrlHandler at all: guard still works
+    with m.quiet_console_input(k):
+        pass
+    ok("a console without the handler call still works and restores", k.mode == 0x1F7)
+finally:
+    m.atexit = real_atexit
+    if real_wft is None:
+        del ctypes.WINFUNCTYPE
+    else:
+        ctypes.WINFUNCTYPE = real_wft
+
+# ---- 19 Nov (e): Ctrl+C stays responsive: quiet input only while hashing, RPC poll off the key-reading thread ----
+import time as _time  # noqa: E402
+
+
+class SlowChain:
+    def __init__(self, challenge=bytes(32), delay=5):
+        self.challenge, self.delay = challenge, delay
+
+    def state(self):
+        _time.sleep(self.delay)
+        return dict(challenge=self.challenge)
+
+
+ticks = []
+
+
+def stop_on_second(hashes, rate):
+    ticks.append(hashes)
+    if len(ticks) == 2:
+        raise KeyboardInterrupt
+
+
+t0 = _time.time()
+try:
+    m.grind(SlowChain(), Keypair().pubkey(), dict(challenge=bytes(32), target=1), 2, stop_on_second, poll_secs=0.1)
+    stopped = False
+except KeyboardInterrupt:
+    stopped = True
+ok("a stop request is acted on straight away even while a slow RPC poll is still waiting", stopped and _time.time() - t0 < 4)
+res = m.grind(SlowChain(challenge=b"\x01" * 32, delay=0), Keypair().pubkey(), dict(challenge=bytes(32), target=1), 2,
+              lambda h, r: None, poll_secs=0.1)
+ok("grind still returns 'moved' when the challenge changes", res[0] == "moved")
+gsrc = msrc[msrc.index("def grind("):msrc.index("def rate_text")]
+ok("quiet console input is on only inside grind (and pick), not around the whole of mining",
+   "with quiet_console_input():" in gsrc and "quiet_console_input" not in msrc[msrc.index("def cmd_mine"):msrc.index("def cmd_status")]
+   and msrc.count("with quiet_console_input():") == 2)
+
+# ---- 19 Nov (e): pick needs no config, and any trouble in the key read exits 16 (Exit), never 11 (Mine) ----
+for label, cfg in (("no config", None), ("broken config", "{ not json")):
+    with tempfile.TemporaryDirectory() as td:
+        shutil.copy(os.path.join(MINER, "sumo_miner.py"), td)
+        if cfg:
+            open(os.path.join(td, "sumo_config.json"), "w").write(cfg)
+        r = subprocess.run([sys.executable, os.path.join(td, "sumo_miner.py"), "pick"], input="x3", capture_output=True,
+                           text=True, timeout=30, cwd=td)
+        ok(f"home menu works with a {label}: key 3 still gives 13, nothing printed", (r.returncode, r.stdout, r.stderr) == (13, "", ""))
+old_read = m.read_key
+try:
+    for exc in (OSError("x"), RuntimeError("x"), KeyboardInterrupt()):
+        def broken():
+            raise exc
+        m.read_key = broken
+        ok(f"home menu: {type(exc).__name__} inside the key read exits 16 (Exit), not 11 (Mine)", refused_code(m.cmd_pick, None, None) == 16)
+finally:
+    m.read_key = old_read
+
+# ---- 19 Nov (e): the typed-ahead flush before address prompts ----
+k = FakeK32()
+m.flush_typed_ahead(k)
+ok("flush_typed_ahead clears the console input buffer", k.flushes == 1)
+asrc = msrc[msrc.index("def ask_line("):msrc.index("def ask_address(")]
+ok("ask_line flushes typed-ahead keys (Windows consoles only) before it asks", 'if os.name == "nt" and sys.stdin.isatty():' in asrc
+   and asrc.index("flush_typed_ahead()") < asrc.index("return input(prompt)"))
 
 
 print(f"miner console checks: {passed} passed")

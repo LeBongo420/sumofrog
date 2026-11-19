@@ -358,4 +358,31 @@ try:
 finally:
     m._account, m.saved_payout = old_acct, old_saved
 
+# 19 Nov (e): a refusal of the network itself stops set-payout before any question; the account-type check is used by Withdraw
+with tempfile.TemporaryDirectory() as td:
+    old_file, old_chain = m.PAYOUT_FILE, m.Chain
+    m.PAYOUT_FILE = os.path.join(td, "payout-address.txt")
+
+    def mainnet(settings):
+        sys.exit("!! This is MAINNET. Test networks only.")
+    m.Chain = mainnet
+    try:
+        res, shown, left = scripted([str(WALLET)], m.cmd_set_payout, types.SimpleNamespace(address=None, yes=True), S)
+        ok("set-payout: a mainnet / bad-link refusal stops the command at once: no question, no 'Try again', nothing saved",
+           res == ("EXIT", "!! This is MAINNET. Test networks only.") and left == [str(WALLET)] and shown == ""
+           and not os.path.exists(m.PAYOUT_FILE))
+    finally:
+        m.PAYOUT_FILE, m.Chain = old_file, old_chain
+
+token_owned = Keypair().pubkey()
+m._account = lambda chain, pk: ({"executable": False, "owner": str(m.TOKEN_PROGRAM), "lamports": 1}
+                                if pk == token_owned else None)
+m.saved_payout = lambda settings: None
+try:
+    res, shown, left = scripted([str(token_owned), str(WALLET)], m.withdraw_destination, wd_args, S, miner_kp, fake_chain)
+    ok("withdraw: a destination that is a token or program account (found by the network check) is refused, then the next address works",
+       res == (WALLET, None) and "belongs to a program or token account" in shown and left == [])
+finally:
+    m._account, m.saved_payout = old_acct, old_saved
+
 print(f"miner checks: {passed} passed")
