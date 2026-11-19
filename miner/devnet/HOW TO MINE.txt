@@ -39,7 +39,7 @@ First time on this PC (or updating the old folder)
    *** BLOCK FOUND! +20 SUMO ***  when you win a block.
 8. To stop, press Ctrl+C. The miner asks "Stop mining?": press Y to stop and go back to
    the menu, or N to keep mining. (Closing the window also stops it.)
-   If Windows asks "Terminate batch job (Y/N)?" instead (this can happen in the first moments,
+   If Windows asks "Terminate batch job (Y/N)?" instead (this can happen between blocks, or
    before the miner is hashing), mining has already stopped: N goes back to the menu, Y closes.
    After anything except mining, the menu comes back.
 

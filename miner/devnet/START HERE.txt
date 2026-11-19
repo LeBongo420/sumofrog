@@ -38,7 +38,8 @@ The menu: 1 Mine SUMO, 2 Check balance, 3 Get test SOL, 4 Set payout address,
 5 Withdraw SOL, 6 Exit. After anything except mining, you come back to the menu.
 To stop mining, press Ctrl+C: the miner asks "Stop mining?" (Y = stop, N = keep mining).
 Closing the window also stops it. If Windows asks "Terminate batch job (Y/N)?" instead
-(possible in the first moments), mining has already stopped: N = menu, Y = close.
+(possible between blocks, or before the miner is hashing), mining has already stopped:
+N = menu, Y = close.
 
 This zip is already set to the public Solana devnet. No settings to edit.
 Never put a real wallet, seed phrase or private key anywhere.

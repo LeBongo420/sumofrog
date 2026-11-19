@@ -1138,4 +1138,116 @@ ok("ask_line flushes typed-ahead keys (Windows consoles only) before it asks", '
    and asrc.index("flush_typed_ahead()") < asrc.index("return input(prompt)"))
 
 
+# ---- 20 Nov (f): the watch thread, quiet input before the workers, and Ctrl+C while a block is being sent ----
+import threading as _threading  # noqa: E402
+
+
+def watcher_threads(before):
+    return [t for t in _threading.enumerate() if t not in before and getattr(t, "_target", None) is not None
+            and t._target.__name__ == "watch"]
+
+
+class FlakyChain:
+    """state() fails every way a poll can fail: an ordinary error, then sys.exit, over and over."""
+    calls = 0
+
+    def state(self):
+        FlakyChain.calls += 1
+        if FlakyChain.calls % 2:
+            raise OSError("network down")
+        sys.exit("config account missing")
+
+
+before, seen = set(_threading.enumerate()), []
+
+
+def look(hashes, rate):
+    w = watcher_threads(before)
+    seen.append((bool(w), w[0].daemon if w else None, w[0].is_alive() if w else None))
+    if len(seen) == 4:
+        raise KeyboardInterrupt
+
+
+try:
+    m.grind(FlakyChain(), Keypair().pubkey(), dict(challenge=bytes(32), target=1), 1, look, poll_secs=0.1)
+except KeyboardInterrupt:
+    pass
+ok("watch thread: it is a daemon, and survives poll errors and sys.exit (still alive on the 4th tick, after several failed polls)",
+   len(seen) == 4 and all(s[0] and s[1] is True for s in seen) and seen[-1][2] is True and FlakyChain.calls >= 2)
+gone = watcher_threads(before)
+for t in gone:
+    t.join(3)
+ok("watch thread has ended once grind has returned", not [t for t in watcher_threads(before) if t.is_alive()])
+
+
+class RetryingChain:
+    def state(self):
+        m.retry_wait(60)    # a retrying RPC call, sitting in its wait
+
+
+before2, ticks2 = set(_threading.enumerate()), []
+
+
+def stop_third(hashes, rate):
+    ticks2.append(1)
+    if len(ticks2) == 3:
+        raise KeyboardInterrupt
+
+
+try:
+    m.grind(RetryingChain(), Keypair().pubkey(), dict(challenge=bytes(32), target=1), 1, stop_third, poll_secs=0.1)
+except KeyboardInterrupt:
+    pass
+t0 = _time.time()
+for t in watcher_threads(before2):
+    t.join(5)
+ok("watch thread: a retry wait ends as soon as grind is done (no more retries after a stop)",
+   not [t for t in watcher_threads(before2) if t.is_alive()] and _time.time() - t0 < 3)
+ev = _threading.Event()
+ev.set()
+m._cancel.event = ev
+try:
+    try:
+        m.retry_wait(60)
+        cancelled = False
+    except RuntimeError:
+        cancelled = True
+finally:
+    del m._cancel.event
+ok("retry_wait stops with an error when its thread's stop flag is set, and just waits for other threads",
+   cancelled and m.retry_wait(0) is None)
+ok("workers start only after quiet console input is on",
+   gsrc.index("with quiet_console_input():") < gsrc.index("p.start()"))
+
+# Ctrl+C while a mined block is being sent: say so, and count it as not settled
+class SendChain:
+    cluster, unencrypted = "devnet", False
+    program = config = mint = Keypair().pubkey()
+
+    def state(self):
+        return dict(next_reward=20 * 10**9, blocks_mined=0, target=1, blocks_to_halving=5, challenge=bytes(32))
+
+    def sol_balance(self, pk): return 1.0
+    def sumo_units(self, pk): return 0
+
+    def submit(self, *a):
+        raise KeyboardInterrupt
+
+
+real = (m.Chain, m.load_key, m.saved_payout, m.grind)
+m.Chain, m.load_key, m.saved_payout = (lambda s: SendChain()), (lambda path: Keypair()), (lambda s: None)
+m.grind = lambda chain, earner, st, workers, on_tick: (7, 100, 2.0)
+import contextlib  # noqa: E402
+import io  # noqa: E402
+buf = io.StringIO()
+try:
+    with contextlib.redirect_stdout(buf):
+        m.cmd_mine(types.SimpleNamespace(keypair="x", payout=None, blocks=0, workers=1, plain=True), {})
+finally:
+    m.Chain, m.load_key, m.saved_payout, m.grind = real
+ok("mining: Ctrl+C while a found block is being sent says it may still go through and to check the balance",
+   "Stopped while sending. It may still go through. Check balance" in buf.getvalue()
+   and "The last block was being sent" in buf.getvalue())
+
+
 print(f"miner console checks: {passed} passed")

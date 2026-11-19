@@ -369,10 +369,64 @@ with tempfile.TemporaryDirectory() as td:
     try:
         res, shown, left = scripted([str(WALLET)], m.cmd_set_payout, types.SimpleNamespace(address=None, yes=True), S)
         ok("set-payout: a mainnet / bad-link refusal stops the command at once: no question, no 'Try again', nothing saved",
-           res == ("EXIT", "!! This is MAINNET. Test networks only.") and left == [str(WALLET)] and shown == ""
+           res == ("EXIT", "!! This is MAINNET. Test networks only.") and left == [str(WALLET)]
+           and shown == "Checking the network...\n"
            and not os.path.exists(m.PAYOUT_FILE))
     finally:
         m.PAYOUT_FILE, m.Chain = old_file, old_chain
+
+# 20 Nov (f): a progress line before the first question; Ctrl+C while a Withdraw is being sent says so
+with tempfile.TemporaryDirectory() as td:
+    old_file, old_chain = m.PAYOUT_FILE, m.Chain
+    m.PAYOUT_FILE = os.path.join(td, "payout-address.txt")
+
+    def offline(settings):
+        raise OSError("offline")
+    m.Chain = offline
+    try:
+        res, shown, left = scripted(["back"], m.cmd_set_payout, types.SimpleNamespace(address=None, yes=True), S)
+        ok("set-payout: 'Checking the network...' is printed before the first question",
+           shown.startswith("Checking the network...\n") and shown.index("Checking the network") < shown.index("<Paste"))
+    finally:
+        m.PAYOUT_FILE, m.Chain = old_file, old_chain
+
+
+class WdRpc:
+    def call(self, method, *params):
+        return {"getBalance": {"value": 5 * 10**9}, "getMinimumBalanceForRentExemption": 890880}[method]
+
+
+class WdChain:
+    cluster, unencrypted, program, config, mint = "devnet", False, PROGRAM, CONFIG, MINT
+    rpc = WdRpc()
+
+    def ata(self, pk):
+        return pk
+
+    def sumo_units(self, pk):
+        return 0
+
+    def sol_balance(self, pk):
+        return 0.0
+
+
+saved = (m.Chain, m.load_key, m.withdraw_destination, m._account, m._fee, m._send)
+m.Chain, m.load_key = (lambda settings: WdChain()), (lambda path: miner_kp)
+m.withdraw_destination = lambda args, settings, kp, chain: (WALLET, None)
+m._account, m._fee = (lambda chain, pk: None), (lambda chain, kp, ixs: 5000)
+
+
+def interrupted_send(chain, kp, ixs):
+    raise KeyboardInterrupt
+m._send = interrupted_send
+try:
+    res, shown, left = scripted([], m.cmd_withdraw, types.SimpleNamespace(
+        address=None, yes=True, sumo=False, keypair="x", plain=True), S)
+    ok("withdraw: Ctrl+C while the send is in flight says it may still go through and to check the balance (not 'Nothing is lost')",
+       res[0] == "EXIT" and "Stopped while sending. It may still go through. Check balance" in res[1]
+       and "Nothing is lost" not in res[1])
+finally:
+    m.Chain, m.load_key, m.withdraw_destination, m._account, m._fee, m._send = saved
 
 token_owned = Keypair().pubkey()
 m._account = lambda chain, pk: ({"executable": False, "owner": str(m.TOKEN_PROGRAM), "lamports": 1}

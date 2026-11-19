@@ -542,6 +542,17 @@ def open_url(req, timeout):
     return _OPENER.open(req, timeout=timeout)
 
 
+_cancel = threading.local()   # grind's watch thread sets .event; its retry waits then end early
+
+
+def retry_wait(secs):
+    ev = getattr(_cancel, "event", None)
+    if ev is None:
+        time.sleep(secs)
+    elif ev.wait(secs):
+        raise RuntimeError("stopped")
+
+
 class Rpc:
     def __init__(self, url):
         self.url = url
@@ -559,11 +570,11 @@ class Rpc:
                     raise      # a redirect is final: no retries and no waiting
                 if attempt == 4:
                     raise
-                time.sleep(2 * (attempt + 1))
+                retry_wait(2 * (attempt + 1))
             except Exception:  # network blips / 429s on the public RPC
                 if attempt == 4:
                     raise
-                time.sleep(2 * (attempt + 1))
+                retry_wait(2 * (attempt + 1))
         if "error" in out:
             raise RpcError(out["error"])
         return out["result"]
@@ -829,6 +840,7 @@ def saved_payout(settings):
 
 
 def cmd_set_payout(args, settings):
+    print("Checking the network...", flush=True)
     chain = None
     try:  # a refusal of the network itself (mainnet, bad link) stops here, before any question
         chain = Chain(settings)
@@ -874,6 +886,9 @@ def cmd_set_payout(args, settings):
 
 SYSVAR_RENT = "SysvarRent111111111111111111111111111111111"
 TOKEN_ACCOUNT_SIZE = 165
+
+
+STOPPED_SENDING = "\nStopped while sending. It may still go through. Check balance (menu 2) before trying again."
 
 
 def _system_transfer(src, dst, lamports):
@@ -1015,6 +1030,8 @@ def cmd_withdraw(args, settings):
             sys.exit("Not sent.")
     try:
         sig = _send(chain, kp, ixs)
+    except KeyboardInterrupt:
+        sys.exit(STOPPED_SENDING)
     except RpcError as e:
         sys.exit(f"!! The network refused it: {e}. Nothing was sent.")
     print(f"\n*** SENT. Transaction {sig}")
@@ -1064,23 +1081,25 @@ def grind(chain, earner, st, workers, on_tick, poll_secs=5):
     found, counter, stop = mp.Queue(), mp.Value("Q", 0), mp.Event()
     procs = [mp.Process(target=_worker, args=(prefix, st["target"], start, i, workers, found, counter, stop), daemon=True)
              for i in range(workers)]
-    for p in procs:
-        p.start()
-    t0 = time.time()
     result = None
     moved, done = threading.Event(), threading.Event()
 
     def watch():  # in its own thread, so a slow or dead RPC can't make Ctrl+C wait
+        _cancel.event = done
         while not done.wait(poll_secs):
             try:
                 if chain.state()["challenge"] != st["challenge"]:
                     moved.set()
                     return
-            except Exception:
+            except (Exception, SystemExit):
                 pass
-    threading.Thread(target=watch, daemon=True).start()
-    try:  # quiet input only while hashing: start-up and network waits keep a normal, working Ctrl+C
-        with quiet_console_input():
+    # quiet input from before the workers start, only while hashing: start-up and network waits keep a normal Ctrl+C
+    with quiet_console_input():
+        for p in procs:
+            p.start()
+        t0 = time.time()
+        threading.Thread(target=watch, daemon=True).start()
+        try:
             while not moved.is_set():
                 try:
                     result = found.get(timeout=0.4)
@@ -1091,13 +1110,13 @@ def grind(chain, earner, st, workers, on_tick, poll_secs=5):
                 on_tick(counter.value, counter.value / el if el else 0)
             else:
                 result = "moved"
-    finally:
-        done.set()
-        stop.set()
-        for p in procs:
-            p.join(timeout=2)
-            if p.is_alive():
-                p.terminate()
+        finally:
+            done.set()
+            stop.set()
+            for p in procs:
+                p.join(timeout=2)
+                if p.is_alive():
+                    p.terminate()
     el = time.time() - t0
     return result, counter.value, el
 
@@ -1135,7 +1154,7 @@ def cmd_mine(args, settings):
         else:
             scr.event(HTTP_NOTE)
     scr.event(f"Mining on the {chain.cluster} with {workers} CPU workers")
-    mined, rates = 0, []
+    mined, rates, sending = 0, [], False
     hud = {}
     try:
         while args.blocks == 0 or mined < args.blocks:
@@ -1162,9 +1181,12 @@ def cmd_mine(args, settings):
             if guess == "moved" or guess is None:
                 scr.event(f"Block #{fmt_int(st['blocks_mined'] + 1)} went to another frog. On to the next one.")
                 continue
+            sending = True
             try:
                 chain.submit(kp, st["challenge"], guess, payout)
+                sending = False
             except RpcError as e:
+                sending = False
                 code = e.custom_code()
                 if code == 6002:
                     scr.event("Another miner got there first. On to the next block.")
@@ -1183,6 +1205,8 @@ def cmd_mine(args, settings):
         pass
     finally:
         scr.stop()
+    if sending:
+        print(STOPPED_SENDING + " (The last block was being sent.)")
     if rates:
         print(f"\n  Stopped. Mined {mined} block(s) this session. Average {sum(rates)/len(rates)/1e6:.2f} MH/s.")
 
