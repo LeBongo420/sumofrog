@@ -442,7 +442,7 @@ try:
     m._send = interrupted_early
     res, shown, left = wd_run()
     ok("withdraw: Ctrl+C before anything was signed or sent says nothing was sent (no 'may still go through')",
-       res == ("EXIT", m.STOPPED_BEFORE) and "may still go through" not in res[1])
+       res == ("EXIT", "\nStopped before anything was sent.") and "may still go through" not in res[1])
     m._send = interrupted_after
     real_balance = WdChain.sol_balance
 

@@ -1368,4 +1368,80 @@ ok("a worker that fails to start: the error comes out, the already-started worke
    failed is not None and len(started) == 1 and joined == started and not started[0].alive)
 
 
+# ---- 20 Nov (h): the real Rpc.call sets send_started for sendTransaction, and only for that ----
+import json as _json  # noqa: E402
+
+
+class RpcHandler(http.server.BaseHTTPRequestHandler):
+    mode = "ok"      # "ok": answers; "rpcerror": a JSON-RPC error; "500": HTTP 500 every time
+    seen = []
+
+    def do_POST(self):
+        body = _json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        RpcHandler.seen.append(body["method"])
+        if RpcHandler.mode == "500":
+            self.send_response(500)
+            self.send_header("Content-Length", "0")
+            self.end_headers()
+            return
+        out = {"jsonrpc": "2.0", "id": 1}
+        if RpcHandler.mode == "rpcerror":
+            out["error"] = {"code": -32002, "message": "refused by the fake"}
+        else:
+            out["result"] = {"value": None}
+        data = _json.dumps(out).encode()
+        self.send_response(200)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def log_message(self, *a):
+        pass
+
+
+rpc_httpd = http.server.HTTPServer(("127.0.0.1", 0), RpcHandler)
+threading.Thread(target=rpc_httpd.serve_forever, daemon=True).start()
+LIVE = f"http://127.0.0.1:{rpc_httpd.server_address[1]}"
+DEAD = f"http://127.0.0.1:{DEAD_PORT}"
+OTHER_METHODS = ("getBalance", "getLatestBlockhash", "getAccountInfo", "getSignatureStatuses", "getMinimumBalanceForRentExemption",
+                 "getFeeForMessage", "getHealth", "getGenesisHash", "getTokenAccountBalance", "requestAirdrop", "simulateTransaction")
+
+
+def call_flag(url, method, mode="ok"):
+    """One real Rpc.call against url (retry sleeps skipped). Returns (flag after the call, what it raised, sleeps)."""
+    real_open, real_sleep, waits = m.open_url, m.time.sleep, []
+    m.open_url = lambda req, timeout: m._OPENER.open(req, timeout=timeout)
+    m.time.sleep = waits.append
+    RpcHandler.mode, RpcHandler.seen = mode, []
+    m.send_started.clear()
+    try:
+        try:
+            m.Rpc(url).call(method, "x")
+            raised = None
+        except Exception as e:  # noqa: BLE001
+            raised = e
+    finally:
+        m.open_url, m.time.sleep = real_open, real_sleep
+    return m.send_started.is_set(), raised, waits
+
+
+flag, raised, waits = call_flag(LIVE, "sendTransaction")
+ok("real Rpc.call: sendTransaction to a working server sets send_started (and the server really got it)",
+   flag and raised is None and RpcHandler.seen == ["sendTransaction"])
+flag, raised, waits = call_flag(LIVE, "sendTransaction", "rpcerror")
+ok("real Rpc.call: sendTransaction answered with an RPC error still counts as started", flag and isinstance(raised, m.RpcError))
+flag, raised, waits = call_flag(DEAD, "sendTransaction")
+ok("real Rpc.call: sendTransaction on a refused connection sets send_started (set before the first try, 5 tries, waits 2, 4, 6, 8)",
+   flag and raised is not None and waits == [2, 4, 6, 8])
+flag, raised, waits = call_flag(LIVE, "sendTransaction", "500")
+ok("real Rpc.call: sendTransaction still flagged after the retries run out on HTTP 500",
+   flag and isinstance(raised, urllib.error.HTTPError) and RpcHandler.seen == ["sendTransaction"] * 5 and waits == [2, 4, 6, 8])
+for method in OTHER_METHODS:
+    results = [call_flag(LIVE, method), call_flag(LIVE, method, "rpcerror"), call_flag(DEAD, method), call_flag(LIVE, method, "500")]
+    ok(f"real Rpc.call: {method} never sets send_started (working server, RPC error, refused connection, HTTP 500)",
+       not any(r[0] for r in results))
+ok("Withdraw's exact 'before anything was sent' text", m.STOPPED_BEFORE == "\nStopped before anything was sent.")
+rpc_httpd.shutdown()
+
+
 print(f"miner console checks: {passed} passed")
