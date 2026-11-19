@@ -467,17 +467,22 @@ def visible_rows(ansi):
 
 
 class FakeRpc(http.server.BaseHTTPRequestHandler):
-    mode = "balance"      # "balance" | "missing" | "hang"
+    mode = "balance"      # "balance" | "missing" | "hang" | "drip" (one byte a second)
     amount = "1500000000"
+    genesis = m.DEVNET_GENESIS
     hits = []
+    methods = []
 
     def do_POST(self):
         FakeRpc.hits.append(self.path)
-        self.rfile.read(int(self.headers.get("Content-Length", 0)))
+        req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        FakeRpc.methods.append(req.get("method"))
         if FakeRpc.mode == "hang":
             time.sleep(8)
             return
-        if FakeRpc.mode == "missing":
+        if req.get("method") == "getGenesisHash":
+            body = {"jsonrpc": "2.0", "id": 1, "result": FakeRpc.genesis}
+        elif FakeRpc.mode == "missing":
             body = {"jsonrpc": "2.0", "id": 1, "error": {"code": -32602, "message": "Invalid param: could not find account"}}
         else:
             body = {"jsonrpc": "2.0", "id": 1, "result": {"value": {"amount": FakeRpc.amount}}}
@@ -485,7 +490,16 @@ class FakeRpc(http.server.BaseHTTPRequestHandler):
         self.send_response(200)
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            if FakeRpc.mode == "drip":
+                for i in range(7):      # a slow-drip server: each byte arrives inside the socket timeout, then it gives up
+                    self.wfile.write(data[i:i + 1])
+                    self.wfile.flush()
+                    time.sleep(1)
+            else:
+                self.wfile.write(data)
+        except OSError:
+            pass
 
     def log_message(self, *a):
         pass
@@ -542,14 +556,17 @@ ok("menu: no form of the secret key (base58, hex, number list) is in the screen 
    not any(s in o for o in outs for s in SECRET_FORMS))
 menu_fn_src = ""
 msrc = open(os.path.join(MINER, "sumo_miner.py")).read()
-for fn in ("read_public_key", "menu_rpc_allowed", "menu_balance", "menu_balance_text", "menu_text", "cmd_menu"):
+for fn in ("read_public_key", "menu_rpc_allowed", "menu_post", "menu_chain_ok", "menu_balance", "menu_balance_text", "menu_text", "cmd_menu"):
     a = msrc.index(f"def {fn}(")
     menu_fn_src += msrc[a:msrc.index("\ndef ", a + 5)]
 tree = ast.parse(menu_fn_src)
-ok("menu: the code never touches the secret half (no Keypair, no .secret(), no load_key, no print of the key list); only data[32:]",
-   not any(isinstance(n, ast.Name) and n.id in ("Keypair", "load_key", "print") for n in ast.walk(tree))
-   and not any(isinstance(n, ast.Attribute) and n.attr == "secret" for n in ast.walk(tree))
-   and "data[32:]" in menu_fn_src and "data[:32]" not in menu_fn_src and "data[0" not in menu_fn_src)
+ok("menu: the code never prints, loads or exposes the secret half (no load_key, no .secret(), no print, no slicing of the key list); "
+   "it parses the file, checks the halves match, and keeps only the public half",
+   not any(isinstance(n, ast.Name) and n.id in ("load_key", "print") for n in ast.walk(tree))
+   and not any(isinstance(n, ast.Attribute) and n.attr in ("secret", "to_json", "__bytes__") for n in ast.walk(tree))
+   and "data[:32]" not in menu_fn_src and "data[32:]" not in menu_fn_src and "data[0" not in menu_fn_src
+   and "Keypair.from_bytes(bytes(data)).pubkey()" in menu_fn_src
+   and "last 32" not in menu_fn_src and "last 32" not in msrc)
 
 # fallbacks
 ok("menu fallback: no wallet file -> 'no wallet yet' (and no balance request)",
@@ -562,17 +579,29 @@ for label, content in (("not JSON", "not json"), ("wrong length", "[1,2,3]"), ("
     r = m.menu_text(SET, bad, 100, 30)
     ok(f"menu fallback: unreadable wallet file ({label}) -> still draws, says 'wallet file unreadable', no crash",
        r is not None and "wallet file unreadable" in visible_rows(r)[14] and not any(s in r for s in ("999", "Traceback")))
+other = Keypair()
+mism = bytearray(bytes(kp))
+mism[32:] = bytes(other.pubkey())          # a public half that belongs to a different key
+bad = os.path.join(MENU_DIR, "bad.json")
+with open(bad, "w") as f:
+    json.dump(list(mism), f)
+FakeRpc.hits.clear()
+r = m.menu_text(SET, bad, 100, 30)
+ok("menu fallback: public half that doesn't match the secret half -> 'wallet file unreadable', the other address is not shown, no request",
+   r is not None and "wallet file unreadable" in visible_rows(r)[14] and m.short(other.pubkey()) not in r
+   and m.short(kp.pubkey()) not in r and not FakeRpc.hits and m.read_public_key(bad) == ("bad", None))
+ok("menu: a good wallet file still reads as its own public address", m.read_public_key(KEYFILE) == ("ok", kp.pubkey()))
 down = dict(SET, rpc="http://127.0.0.1:1")      # nothing listens there
 t0 = time.time()
 r = visible_rows(m.menu_text(down, KEYFILE, 100, 30))
-ok("menu fallback: no network -> 'balance: offline', wallet still shown, fast", "balance: offline" in r[15]
+ok("menu fallback: no network -> 'offline' under BALANCE, wallet still shown, fast", "offline" in r[15] and "balance:" not in r[15]
    and m.short(kp.pubkey()) in r[14] and time.time() - t0 < 4)
 FakeRpc.mode = "hang"
 t0 = time.time()
 r = visible_rows(m.menu_text(SET, KEYFILE, 100, 30))
 took = time.time() - t0
-ok(f"menu fallback: a server that never answers -> 'balance: offline' after about {m.MENU_RPC_TIMEOUT:.1f}s (took {took:.1f}s, never more than 5s)",
-   "balance: offline" in r[15] and took < 5)
+ok(f"menu fallback: a server that never answers -> 'offline' after about {m.MENU_RPC_TIMEOUT:.1f}s (took {took:.1f}s, never more than 5s)",
+   "offline" in r[15] and took < 5)
 FakeRpc.mode = "missing"
 ok("menu: wallet with no token account yet -> 0.00 SUMO", "0.00 SUMO" in visible_rows(m.menu_text(SET, KEYFILE, 100, 30))[15])
 FakeRpc.mode = "balance"
@@ -584,9 +613,89 @@ FakeRpc.amount = "1500000000"
 FakeRpc.hits.clear()
 foreign = dict(SET, rpc="https://mainnet.example.org")
 t0 = time.time()
-ok("menu: never asks a link that isn't this computer, the config's devnet link or the shipped link (offline, no request)",
-   "balance: offline" in visible_rows(m.menu_text(foreign, KEYFILE, 100, 30))[15] and not FakeRpc.hits and time.time() - t0 < 2
+ok("menu: never asks a link that isn't this computer, public devnet or the shipped private link (offline, no request)",
+   "offline" in visible_rows(m.menu_text(foreign, KEYFILE, 100, 30))[15] and not FakeRpc.hits and time.time() - t0 < 2
    and m.menu_rpc_allowed(dict(SET, rpc="https://api.devnet.solana.com")) and not m.menu_rpc_allowed(dict(SET, rpc="file:///etc/passwd")))
+
+# Low 1: the menu follows check_devnet's link rules, and a refused link gets no request at all
+sent = []
+real_urlopen = m.urllib.request.urlopen
+
+
+def spy_urlopen(req, *a, **k):
+    sent.append(getattr(req, "full_url", str(req)))
+    return real_urlopen(req, *a, **k)
+
+
+m.urllib.request.urlopen = spy_urlopen
+PRIVATE = "http://private-test.invalid:8899"
+refusals = (
+    ("http (unencrypted) devnet link", dict(SET, rpc="http://evil.example/rpc")),
+    ("mainnet link", dict(SET, rpc="https://api.mainnet-beta.solana.com")),
+    ("mainnet link set as devnet_rpc", dict(SET, rpc="https://api.mainnet-beta.solana.com", devnet_rpc="https://api.mainnet-beta.solana.com")),
+    ("plain-http private host with no private_genesis", dict(SET, network="private", rpc=PRIVATE, _shipped_rpc=PRIVATE)),
+    ("plain-http host that is not the shipped private link", dict(SET, network="private", rpc="http://other.invalid:8899",
+                                                                  _shipped_rpc=PRIVATE, private_genesis="G" * 43)),
+    ("not a web link", dict(SET, rpc="ftp://x.example/rpc")),
+    ("empty link", dict(SET, rpc="")),
+)
+for label, st in refusals:
+    sent.clear()
+    FakeRpc.hits.clear()
+    r = m.menu_text(st, KEYFILE, 100, 30)
+    ok(f"Low 1: {label} -> refused, shows 'offline', no request sent",
+       not m.menu_rpc_allowed(st) and m.menu_balance(st, kp.pubkey()) is None and not sent and not FakeRpc.hits
+       and r is not None and "offline" in visible_rows(r)[15] and "balance:" not in visible_rows(r)[15])
+ok("Low 1: public devnet, this computer and the shipped private link (with private_genesis) are still allowed",
+   m.menu_rpc_allowed(dict(SET, rpc="https://api.devnet.solana.com")) and m.menu_rpc_allowed(SET)
+   and m.menu_rpc_allowed(dict(SET, network="private", rpc=PRIVATE, _shipped_rpc=PRIVATE, private_genesis="G" * 43)))
+ok("Low 1: the menu and check_devnet share one link rule (link_problem)",
+   m.link_problem("http://evil.example", {}) is not None and m.link_problem("https://api.devnet.solana.com", {}) is None
+   and "link_problem(url, settings)" in msrc[msrc.index("def check_devnet("):msrc.index("class Chain")]
+   and "link_problem(url, settings)" in menu_fn_src)
+FakeRpc.methods.clear()
+FakeRpc.mode = "balance"
+ok("menu: this computer's chain is asked for its genesis hash first, then the balance (devnet genesis -> 1.50 SUMO)",
+   "1.50 SUMO" in visible_rows(m.menu_text(SET, KEYFILE, 100, 30))[15] and FakeRpc.methods == ["getGenesisHash", "getTokenAccountBalance"])
+FakeRpc.methods.clear()
+FakeRpc.genesis = m.MAINNET_GENESIS
+ok("menu: a chain whose genesis hash is mainnet -> 'offline', the wallet is never asked about",
+   "offline" in visible_rows(m.menu_text(SET, KEYFILE, 100, 30))[15] and FakeRpc.methods == ["getGenesisHash"])
+FakeRpc.genesis = m.DEVNET_GENESIS
+m.urllib.request.urlopen = real_urlopen
+
+# Note 2: a slow-drip server (one byte a second, so the 2.5 s socket timeout never fires) needs the hard thread limit
+FakeRpc.mode = "drip"
+t0 = time.time()
+r = visible_rows(m.menu_text(SET, KEYFILE, 100, 30))
+took = time.time() - t0
+ok(f"menu: a slow-drip server (one byte a second) -> 'offline' at the hard limit (took {took:.1f}s, under 5s)",
+   "offline" in r[15] and took < 5)
+FakeRpc.mode = "balance"
+
+# Note 1: Ctrl+C while the menu loads -> exit 1, nothing printed
+real_menu_text = m.menu_text
+real_enable = m.enable_colour
+
+
+def interrupted(*a, **k):
+    raise KeyboardInterrupt
+
+
+import contextlib  # noqa: E402
+import io  # noqa: E402
+m.enable_colour = lambda plain: True
+m.menu_text = interrupted
+out, err = io.StringIO(), io.StringIO()
+code = None
+with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+    try:
+        m.cmd_menu(types.SimpleNamespace(plain=False, keypair=KEYFILE), SET)
+    except SystemExit as e:
+        code = e.code
+ok("Note 1: Ctrl+C inside the menu -> exit code 1, nothing printed", code == 1 and out.getvalue() == "" and err.getvalue() == "")
+m.menu_text = real_menu_text
+m.enable_colour = real_enable
 ok("menu fallback: window narrower than 80 columns (or shorter than 30 rows) -> None, so the launcher shows the plain menu",
    m.menu_text(SET, KEYFILE, 79, 40) is None and m.menu_text(SET, KEYFILE, 120, 29) is None and m.menu_text(SET, KEYFILE, 0, 0) is None
    and m.menu_text(SET, KEYFILE, 80, 30) is not None)
@@ -639,6 +748,20 @@ r = subprocess.run([sys.executable, os.path.join(E2E, "sumo_miner.py"), "menu"],
 ok("menu command: output that isn't a console (no SUMO_FORCE_COLOUR) -> exit 1, nothing printed", r.returncode == 1 and r.stdout == "")
 r = run_menu(100, 30, keep_key=False)
 ok("menu command: no wallet file -> exit 0, 'no wallet yet'", r.returncode == 0 and "no wallet yet" in visible_rows(r.stdout)[14])
+shutil.copy(KEYFILE, os.path.join(E2E, "sumo-devnet-key.json"))
+if os.name != "nt":
+    FakeRpc.mode = "hang"
+    env = dict(os.environ, SUMO_FORCE_COLOUR="1", COLUMNS="100", LINES="30", PYTHONIOENCODING="utf-8", TERM="xterm-256color")
+    env.pop("NO_COLOR", None)
+    env.pop("SUMO_PLAIN", None)
+    p = subprocess.Popen([sys.executable, os.path.join(E2E, "sumo_miner.py"), "menu"], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                         text=True, env=env, cwd=E2E, start_new_session=True)
+    time.sleep(1.0)      # inside the balance wait
+    os.killpg(p.pid, signal.SIGINT)
+    out, err = p.communicate(timeout=30)
+    ok("Note 1: the real menu command given Ctrl+C while it waits for the balance -> exit 1, nothing printed (launcher shows the plain menu)",
+       p.returncode == 1 and out == "" and err == "")
+    FakeRpc.mode = "balance"
 os.remove(os.path.join(E2E, "sumo_menu.py"))
 shutil.copy(KEYFILE, os.path.join(E2E, "sumo-devnet-key.json"))
 r = run_menu(100, 30)

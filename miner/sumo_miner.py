@@ -479,17 +479,28 @@ class RpcError(Exception):
             return None
 
 
+def link_problem(url, settings):
+    """None when the network link passes the first check (before any request is sent), or the plain
+    sentence to stop with. https only, except this computer (localhost) and the private network's own
+    shipped link when "private_genesis" is set. check_devnet and the picture menu both use this."""
+    scheme, local = url_scheme(url), is_local_url(url)
+    if scheme not in ("http", "https"):
+        return "The network link must start with https:// . Stopping."
+    plain_http_ok = local or (url == settings.get("_shipped_rpc") and settings.get("private_genesis"))
+    if scheme == "http" and not plain_http_ok:
+        return "That network link isn't encrypted (http). Use an https:// link. Stopping."
+    return None
+
+
 def check_devnet(rpc, url, settings):
     """Refuse to run anywhere except devnet, a local test validator, or the one private
     Sumo Frog test network named in sumo_config.json ("private_genesis").
     Links must be https, except on this computer (localhost) and the private network's own
     link from sumo_config.json, which is plain http for now (see the note printed below)."""
     scheme, local = url_scheme(url), is_local_url(url)
-    if scheme not in ("http", "https"):
-        sys.exit("The network link must start with https:// . Stopping.")
-    plain_http_ok = local or (url == settings.get("_shipped_rpc") and settings.get("private_genesis"))
-    if scheme == "http" and not plain_http_ok:
-        sys.exit("That network link isn't encrypted (http). Use an https:// link. Stopping.")
+    problem = link_problem(url, settings)
+    if problem:
+        sys.exit(problem)
     genesis = rpc.call("getGenesisHash")
     if genesis == MAINNET_GENESIS:
         sys.exit("This RPC is Solana MAINNET. Sumo Frog never runs there. Stopping.")
@@ -1019,14 +1030,15 @@ def cmd_status(args, settings):
 
 # ======================= picture menu (Pixy's design) =======================
 # The launcher calls `sumo_miner.py menu` before it asks for a key. It draws an 80 x 30 colour screen, or
-# exits 1 having printed nothing, and then the launcher shows its plain menu. It only ever reads the PUBLIC
-# half of the wallet file and makes at most one short balance request, so it cannot print a secret or hang.
+# exits 1 having printed nothing, and then the launcher shows its plain menu. It parses the wallet file, uses
+# only the public half, and makes at most a short chain check and one balance request, so it can't print a secret or hang.
 MENU_RPC_TIMEOUT = 2.5      # seconds for the one balance request; the whole wait is capped a little above
 
 
 def read_public_key(path):
-    """("none", None) no wallet file, ("bad", None) unreadable, ("ok", Pubkey). A wallet file is the secret
-    key (32 bytes) followed by the public key (32 bytes): only the last 32 bytes are used here."""
+    """("none", None) no wallet file, ("bad", None) unreadable or damaged, ("ok", Pubkey). The menu parses the
+    wallet file and checks that its two halves belong together (the same check the miner makes when it loads
+    the wallet), then uses only the public half: the secret half is never shown, logged or kept."""
     if not os.path.isfile(path):
         return "none", None
     try:
@@ -1035,38 +1047,62 @@ def read_public_key(path):
         if not (isinstance(data, list) and len(data) == 64
                 and all(type(x) is int and 0 <= x < 256 for x in data)):
             return "bad", None
-        pub = Pubkey.from_bytes(bytes(data[32:]))
+        pub = Keypair.from_bytes(bytes(data)).pubkey()      # raises if the public half doesn't match
         return "ok", pub
     except Exception:
         return "bad", None
 
 
+MENU_DEVNET_RPC = "https://api.devnet.solana.com"
+
+
 def menu_rpc_allowed(settings):
-    """Only this computer, the shipped private link or the devnet link from the config."""
+    """The same first rules as check_devnet (https only, except this computer and the shipped private link when
+    private_genesis is set), and then only a link that is exactly public devnet, this computer or the shipped
+    private link. Any other link (including a mainnet one) gets no request at all."""
     url = settings.get("rpc") or ""
-    if url_scheme(url) not in ("http", "https"):
+    if not isinstance(url, str) or link_problem(url, settings):
         return False
-    return is_local_url(url) or url in (settings.get("devnet_rpc") or "https://api.devnet.solana.com",
-                                        settings.get("_shipped_rpc"))
+    if is_local_url(url) or url == MENU_DEVNET_RPC:
+        return True
+    return bool(settings.get("private_genesis")) and url == settings.get("_shipped_rpc")
+
+
+def menu_post(url, method, params, timeout):
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": method, "params": params}).encode()
+    req = urllib.request.Request(url, body, {"Content-Type": "application/json"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
+        return json.loads(r.read(65536))
+
+
+def menu_chain_ok(settings, timeout):
+    """Never ask about the wallet on mainnet. Public devnet is known by its exact link; this computer and the
+    private link are asked for their genesis hash first (no wallet details in that request)."""
+    url = settings["rpc"]
+    if url == MENU_DEVNET_RPC:
+        return True
+    genesis = menu_post(url, "getGenesisHash", [], timeout).get("result")
+    if not isinstance(genesis, str) or genesis == MAINNET_GENESIS:
+        return False
+    if is_local_url(url):
+        return True
+    return genesis in (DEVNET_GENESIS, settings.get("private_genesis"))
 
 
 def menu_balance(settings, owner, timeout=MENU_RPC_TIMEOUT):
-    """The wallet's SUMO in base units, or None when the network can't answer in time. One request, no
-    retries, and a hard time limit (the request runs in a helper thread that is simply left behind)."""
+    """The wallet's SUMO in base units, or None when the network can't answer in time or the link isn't allowed.
+    One balance request, no retries, and a hard time limit (the request runs in a helper thread that is simply
+    left behind)."""
     result = {}
 
     def work():
         try:
-            if not menu_rpc_allowed(settings):
+            if not menu_rpc_allowed(settings) or not menu_chain_ok(settings, timeout):
                 return
             program = Pubkey.from_string(settings["program_id"])
             mint = Pubkey.find_program_address([b"mint"], program)[0]
             ata = Pubkey.find_program_address([bytes(owner), bytes(TOKEN_PROGRAM), bytes(mint)], ATA_PROGRAM)[0]
-            body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "getTokenAccountBalance",
-                               "params": [str(ata), {"commitment": "confirmed"}]}).encode()
-            req = urllib.request.Request(settings["rpc"], body, {"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=timeout) as r:
-                out = json.loads(r.read(65536))
+            out = menu_post(settings["rpc"], "getTokenAccountBalance", [str(ata), {"commitment": "confirmed"}], timeout)
             if "result" in out:
                 result["units"] = int(out["result"]["value"]["amount"])
             elif "could not find account" in str((out.get("error") or {}).get("message", "")).lower():
@@ -1102,7 +1138,7 @@ def menu_text(settings, keypair_path, cols, rows):
             parts = ("wallet file unreadable", False, "-", False)
         else:
             units = menu_balance(settings, pub)
-            balance = ("balance: offline", False) if units is None else (menu_balance_text(units), True)
+            balance = ("offline", False) if units is None else (menu_balance_text(units), True)
             parts = (short(pub), True) + balance
         return sumo_menu.render(VERSION, *parts, selected=1, skip_last_cell=(rows == sumo_menu.ROWS and cols == sumo_menu.COLS))
     except Exception:
@@ -1118,6 +1154,8 @@ def cmd_menu(args, settings):
             text = menu_text(settings, args.keypair, size.columns, size.lines)
             if text is not None:
                 text.encode(sys.stdout.encoding or "ascii")   # a console that can't show it: plain menu
+    except KeyboardInterrupt:
+        sys.exit(1)             # Ctrl+C while it loads: say nothing, the launcher shows its plain menu
     except Exception:
         text = None
     if text is None:
@@ -1125,6 +1163,8 @@ def cmd_menu(args, settings):
     try:
         sys.stdout.write(text)
         sys.stdout.flush()
+    except KeyboardInterrupt:
+        sys.exit(1)
     except Exception:
         sys.exit(1)
 
@@ -1270,6 +1310,8 @@ def main():
     try:
         _main()
     except KeyboardInterrupt:
+        if sys.argv[1:2] == ["menu"]:
+            sys.exit(1)      # the picture menu says nothing: the launcher then shows its plain menu
         # Ctrl+C anywhere (also during start-up or a network call): a friendly stop, not a traceback.
         print("\n  Stopped (Ctrl+C). Nothing is lost. You can start mining again whenever you like.", flush=True)
     except SystemExit:
