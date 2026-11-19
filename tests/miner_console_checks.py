@@ -470,6 +470,10 @@ class FakeRpc(http.server.BaseHTTPRequestHandler):
     mode = "balance"      # "balance" | "missing" | "hang" | "drip" (one byte a second)
     amount = "1500000000"
     genesis = m.DEVNET_GENESIS
+    redirect_code = 302
+    status = 500          # "status" mode: the first fail_first requests get this HTTP error, the rest are answered normally
+    fail_first = 0
+    seen = 0
     hits = []
     methods = []
 
@@ -480,8 +484,15 @@ class FakeRpc(http.server.BaseHTTPRequestHandler):
         if FakeRpc.mode == "hang":
             time.sleep(8)
             return
+        if FakeRpc.mode == "status":
+            FakeRpc.seen += 1
+            if FakeRpc.seen <= FakeRpc.fail_first:
+                self.send_response(FakeRpc.status)
+                self.send_header("Content-Length", "0")
+                self.end_headers()
+                return
         if FakeRpc.mode == "redirect":
-            self.send_response(302)
+            self.send_response(FakeRpc.redirect_code)
             self.send_header("Location", f"http://127.0.0.1:{self.server.server_address[1]}/followed")
             self.send_header("Content-Length", "0")
             self.end_headers()
@@ -748,6 +759,70 @@ except Exception:
     rpc_ok = False
 m.time.sleep = real_sleep
 ok("Note 3: Rpc.call (used by every command) fails on a redirect and never requests the other address", rpc_ok is False and "/followed" not in FakeRpc.hits)
+# a redirect is final: exactly one request, no waiting, whatever the 3xx code
+for code in (300, 301, 302, 303, 304, 305, 307, 308):
+    FakeRpc.redirect_code = code
+    FakeRpc.hits.clear()
+    waits = []
+    m.time.sleep = waits.append
+    t0 = time.time()
+    try:
+        m.Rpc(RPC).call("getGenesisHash")
+        err_code = None
+    except m.urllib.error.HTTPError as e:
+        err_code = e.code
+    took = time.time() - t0
+    m.time.sleep = real_sleep
+    ok(f"Rpc.call: a {code} redirect -> exactly one request, no retries, no waits, quick (HTTP error {err_code})",
+       err_code == code and len(FakeRpc.hits) == 1 and waits == [] and took < 2)
+FakeRpc.redirect_code = 302
+
+# the other retry behaviour is unchanged: blips and 429s are retried 5 times with waits of 2, 4, 6, 8 s
+FakeRpc.mode = "status"
+for label, status, fail_first, want_requests, want_waits, want_ok in (
+        ("two 500 errors then an answer -> 3 requests, waits 2 and 4, works", 500, 2, 3, [2, 4], True),
+        ("a 429 four times then an answer -> 5 requests, waits 2, 4, 6, 8, works", 429, 4, 5, [2, 4, 6, 8], True),
+        ("a 429 every time -> 5 requests, waits 2, 4, 6, 8, then the error", 429, 99, 5, [2, 4, 6, 8], False)):
+    FakeRpc.status, FakeRpc.fail_first, FakeRpc.seen = status, fail_first, 0
+    FakeRpc.hits.clear()
+    waits = []
+    m.time.sleep = waits.append
+    try:
+        got = m.Rpc(RPC).call("getGenesisHash")
+        worked = got == m.DEVNET_GENESIS
+    except m.urllib.error.HTTPError:
+        worked = False
+    m.time.sleep = real_sleep
+    ok(f"Rpc.call retry unchanged: {label}", worked is want_ok and len(FakeRpc.hits) == want_requests and waits == want_waits)
+FakeRpc.fail_first = 0
+waits = []
+m.time.sleep = waits.append
+try:
+    m.Rpc("http://127.0.0.1:1").call("getGenesisHash")
+    dead_ok = True
+except Exception:
+    dead_ok = False
+m.time.sleep = real_sleep
+ok("Rpc.call retry unchanged: nothing listening -> 5 tries (waits 2, 4, 6, 8), then the error", dead_ok is False and waits == [2, 4, 6, 8])
+
+# a link that isn't text (null, number, list ...) is refused with the clear https message, never a TypeError
+for bad_link in (None, 5, 1.5, ["https://x"], {"a": 1}, b"https://api.devnet.solana.com", True):
+    msg = m.link_problem(bad_link, {"_shipped_rpc": bad_link, "private_genesis": "x"})
+    try:
+        m.Chain({"rpc": bad_link, "program_id": "6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW"})
+        stop = None
+    except SystemExit as e:
+        stop = str(e.code)
+    except Exception as e:
+        stop = "CRASH " + type(e).__name__
+    ok(f"non-text link {bad_link!r}: link_problem gives the https message, has_odd_authority is True, not local, Chain stops cleanly",
+       msg is not None and "https://" in msg and m.has_odd_authority(bad_link) is True and m.is_local_url(bad_link) is False
+       and m.url_scheme(bad_link) == "" and stop == "The network link must start with https:// . Stopping."
+       and m.menu_rpc_allowed(dict(SET, rpc=bad_link)) is False)
+ok("non-text link: the menu shows 'offline' without a request or a crash",
+   "offline" in visible_rows(m.menu_text(dict(SET, rpc=None), KEYFILE, 100, 30))[15])
+
+FakeRpc.mode = "redirect"
 FakeRpc.hits.clear()
 FakeRpc.genesis = m.DEVNET_GENESIS
 ok("Note 3: the menu shows 'offline' on a redirect and never requests the other address",

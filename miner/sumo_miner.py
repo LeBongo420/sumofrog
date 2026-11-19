@@ -432,7 +432,10 @@ def secs_text(el):
 
 def has_odd_authority(url):
     """True for a link with a backslash anywhere or a user name part (name@host): Python's link reader and
-    the network code can read such links differently, so the miner refuses them."""
+    the network code can read such links differently, so the miner refuses them. Anything that isn't text
+    (a missing or hand-edited link) is refused too."""
+    if not isinstance(url, str):
+        return True
     try:
         return "\\" in url or "@" in urllib.parse.urlsplit(url).netloc
     except ValueError:
@@ -442,7 +445,7 @@ def has_odd_authority(url):
 def is_local_url(url):
     """True only when the link's host is exactly this computer (not just containing 'localhost')."""
     try:
-        if has_odd_authority(url):
+        if has_odd_authority(url):          # also True for anything that is not text
             return False
         return (urllib.parse.urlsplit(url).hostname or "").lower() in LOCAL_HOSTS
     except ValueError:
@@ -450,6 +453,8 @@ def is_local_url(url):
 
 
 def url_scheme(url):
+    if not isinstance(url, str):
+        return ""
     try:
         return urllib.parse.urlsplit(url).scheme.lower()
     except ValueError:
@@ -482,6 +487,12 @@ class Rpc:
                 with open_url(req, 30) as r:
                     out = json.load(r)
                 break
+            except urllib.error.HTTPError as e:
+                if 300 <= e.code < 400:
+                    raise      # a redirect is final: no retries and no waiting
+                if attempt == 4:
+                    raise
+                time.sleep(2 * (attempt + 1))
             except Exception:  # network blips / 429s on the public RPC
                 if attempt == 4:
                     raise
