@@ -23,7 +23,7 @@ cls
 rem Pixy's picture menu is drawn by sumo_miner.py. It exits 1 when it can't draw (small window, no colour, any error): then the plain menu below is used.
 "%PY%" sumo_miner.py menu 2>nul
 if errorlevel 1 goto menu_plain
-choice /c 123456 /n >nul
+"%PY%" sumo_miner.py pick
 goto menu_pick
 :menu_plain
 cls
@@ -38,15 +38,17 @@ echo     4   Set payout address
 echo     5   Withdraw SOL
 echo     6   Exit
 echo.
-choice /c 123456 /n /m "  Press a number from 1 to 6: "
+<nul set /p "=  Press a number from 1 to 6: "
+"%PY%" sumo_miner.py pick
 :menu_pick
-if errorlevel 6 goto bye
-if errorlevel 5 goto withdraw
-if errorlevel 4 goto payout
-if errorlevel 3 goto faucet
-if errorlevel 2 goto balance
-if errorlevel 1 goto mine
-goto menu
+rem pick exits 10 + the key (11 to 16) and stays silent on any other key. Anything lower (a crash) is Exit, never Mine.
+if errorlevel 16 goto bye
+if errorlevel 15 goto withdraw
+if errorlevel 14 goto payout
+if errorlevel 13 goto faucet
+if errorlevel 12 goto balance
+if errorlevel 11 goto mine
+goto bye
 
 :mine
 rem Never make a new wallet while an old one still sits next to this launcher.
@@ -61,7 +63,7 @@ echo  Getting free test SOL for fees...
 "%PY%" sumo_miner.py faucet
 :do_mine
 echo.
-echo  ^>^> MINING... close this window or press Ctrl+C to stop.
+echo  ^>^> MINING... press Ctrl+C to stop (it asks first), or close this window.
 echo  Window too small for the frog? Make it wider, about 100 columns.
 "%PY%" sumo_miner.py mine
 if errorlevel 1 goto action_failed
@@ -96,14 +98,10 @@ echo  SEND REWARDS TO YOUR OWN WALLET
 echo  -------------------------------
 echo  Paste your wallet's PUBLIC address, the one you would share to receive coins.
 echo  NEVER paste a seed phrase or private key here or anywhere else.
-echo  Type  none  to keep rewards in the miner's own test wallet.
+echo  Type  none  to keep rewards in the miner's own test wallet, or  back  to cancel.
 echo.
-set "ADDR="
-set /p "ADDR=Address: "
-rem Strip any double quotes, so nothing typed can add extra options. The -- keeps it an address.
-if defined ADDR set "ADDR=%ADDR:"=%"
-if not defined ADDR goto menu
-"%PY%" sumo_miner.py set-payout -- "%ADDR%"
+rem The miner asks for the address itself and asks again if it isn't valid, so nothing typed reaches this file.
+"%PY%" sumo_miner.py set-payout
 goto done
 
 :withdraw
@@ -111,20 +109,14 @@ cls
 echo.
 echo  SEND THE MINER'S LEFTOVER TEST SOL TO YOUR OWN WALLET
 echo  -----------------------------------------------------
-echo  Paste your wallet's PUBLIC address, the one you would share to receive coins,
-echo  or just press Enter to use your saved payout address.
+echo  Paste your wallet's PUBLIC address, the one you would share to receive coins.
+echo  If you saved a payout address, you will be asked whether to use it.
+echo  Type  back  to cancel.
 echo  NEVER paste a seed phrase or private key here or anywhere else.
 echo  You will see the amount and the address, and nothing is sent until you type  y
 echo.
-set "ADDR="
-set /p "ADDR=Address (Enter = payout address): "
-if defined ADDR set "ADDR=%ADDR:"=%"
-rem No ( ) blocks here: a folder name like "sumo (1)" would break them.
-if defined ADDR goto withdraw_to
+rem The miner asks for the address itself and asks again if it isn't valid. No ( ) blocks here: a folder name like "sumo (1)" would break them.
 "%PY%" sumo_miner.py withdraw
-goto done
-:withdraw_to
-"%PY%" sumo_miner.py withdraw -- "%ADDR%"
 goto done
 
 :done

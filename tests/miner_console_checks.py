@@ -73,8 +73,8 @@ with m.quiet_console_input(k):
     flushed_inside = k.flushes
 ok("quickedit, echo, line input and mouse are switched off while mining",
    not inside & (QUICK_EDIT | ECHO | LINE | MOUSE))
-ok("Ctrl+C stays on (processed input) and extended flags set so quickedit really is off",
-   inside & PROCESSED and inside & EXTENDED)
+ok("Ctrl+C is read as a key, not sent as a signal (processed input off, so cmd never asks 'Terminate batch job'); extended flags set so quickedit really is off",
+   not inside & PROCESSED and inside & EXTENDED)
 ok("keys are discarded while mining", flushed_inside >= 2)
 ok("the old console mode is restored on exit", k.mode == 0x1F7)
 
@@ -958,6 +958,63 @@ os.remove(os.path.join(E2E, "sumo_config.json"))
 r = run_menu(100, 30)
 ok("menu command: even a missing config -> exit 1 (the launcher hides stderr with 2>nul and shows the plain menu)", r.returncode == 1 and r.stdout == "")
 srv.shutdown()
+
+
+# ---- 19 Nov: Ctrl+C asks 'Stop mining?' (n carries on); the home menu key reader is silent ----
+class FakeScreen:
+    def __init__(self):
+        self.events, self.draws = [], 0
+
+    def event(self, text):
+        self.events.append(text)
+
+    def draw(self, hud, found=False):
+        self.draws += 1
+
+
+def stop_with(pending, answers):
+    old = m.pending_keys, m.read_key
+    left = list(answers)
+    m.pending_keys, m.read_key = (lambda: pending), (lambda: left.pop(0))
+    scr = FakeScreen()
+    try:
+        return m.stop_requested(scr, {}), scr, left
+    finally:
+        m.pending_keys, m.read_key = old
+
+
+res, scr, left = stop_with("abc", [])
+ok("mining: ordinary keys do nothing (no question, nothing drawn)", res is False and scr.events == [] and scr.draws == 0)
+res, scr, left = stop_with("\x03", ["n"])
+ok("mining: Ctrl+C then N asks 'Stop mining?' and carries on mining", res is False and "Stop mining?" in scr.events[0]
+   and scr.events[-1] == "OK, still mining." and left == [])
+res, scr, left = stop_with("x\x03", ["q", "", "N"])
+ok("mining: other keys while the question is up are ignored; N still carries on", res is False and left == [])
+res, scr, left = stop_with("\x03", ["Y"])
+ok("mining: Ctrl+C then Y stops", res is True and left == [])
+res, scr, left = stop_with("\x03", ["\x03"])
+ok("mining: Ctrl+C twice stops (Ctrl+C is also 'yes')", res is True)
+res, scr, left = stop_with("\x03", ["\r"])
+ok("mining: Enter or Esc at the question carries on mining", res is False)
+ok("pending_keys is empty when the console guard is off", m.pending_keys() == "")
+msrc = open(os.path.join(MINER, "sumo_miner.py")).read()
+tick = msrc[msrc.index("def tick(hashes, rate):"):msrc.index("scr.draw(hud)\n            guess")]
+ok("mining tick asks via stop_requested and raises KeyboardInterrupt only when it says stop, before it redraws",
+   "if stop_requested(scr, hud):\n                    raise KeyboardInterrupt" in tick
+   and "flush_console_input" not in tick and tick.index("stop_requested") < tick.index("scr.draw(hud)"))
+
+
+def run_pick(keys):
+    r = subprocess.run([sys.executable, os.path.join(MINER, "sumo_miner.py"), "pick"], input=keys, capture_output=True,
+                       text=True, timeout=30, cwd=MINER)
+    return r.returncode, r.stdout, r.stderr
+
+
+ok("home menu: wrong keys are ignored with no output at all (no bell) and 3 gives exit code 13",
+   run_pick("a\x07 x9\n703") == (13, "", ""))
+ok("home menu: keys 1 to 6 exit 11 to 16", [run_pick(str(i))[0] for i in range(1, 7)] == [11, 12, 13, 14, 15, 16])
+ok("home menu: Ctrl+C or no input at all exits 16 (Exit), silently", run_pick("\x03")[0] == 16 and run_pick("")[0] == 16
+   and run_pick("")[1:] == ("", ""))
 
 
 print(f"miner console checks: {passed} passed")

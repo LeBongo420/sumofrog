@@ -306,10 +306,10 @@ def main():
     ok("launcher menu: 1 Mine SUMO, 2 Check balance, 3 Get test SOL, 4 Set payout address, 5 Withdraw SOL, 6 Exit",
        [" ".join(l.split()[1:]) for l in menu_items] == ["1 Mine SUMO", "2 Check balance", "3 Get test SOL",
                                                        "4 Set payout address", "5 Withdraw SOL", "6 Exit"])
-    order = ["if errorlevel 6 goto bye", "if errorlevel 5 goto withdraw", "if errorlevel 4 goto payout",
-             "if errorlevel 3 goto faucet", "if errorlevel 2 goto balance", "if errorlevel 1 goto mine"]
+    order = ["if errorlevel 16 goto bye", "if errorlevel 15 goto withdraw", "if errorlevel 14 goto payout",
+             "if errorlevel 13 goto faucet", "if errorlevel 12 goto balance", "if errorlevel 11 goto mine"]
     pos = [launcher.find(x) for x in order]
-    ok("launcher menu keys are tested highest first: 6, 5, 4, 3, 2, 1 (the other way round would make every key mine)",
+    ok("launcher menu keys (pick exits 10 + key) are tested highest first: 16 to 11 (the other way round would make every key mine)",
        all(p >= 0 for p in pos) and pos == sorted(pos))
     ok("launcher never passes --yes, --y..., -y or /y to anything (any word starting that way): Withdraw and Set payout always ask",
        not any(tok.lower().startswith(("--y", "-y", "/y")) for l in lines for tok in l.split()))
@@ -320,10 +320,10 @@ def main():
     ok("sumo_miner.py withdraw still asks 'Send now? [y/N]' unless --yes is given, and the launcher never gives it",
        'input("Send now? [y/N] ")' in wd and "if not args.yes:" in wd and "--yes" not in launcher)
     wdest = miner_src[miner_src.index("def withdraw_destination"):miner_src.index("def cmd_withdraw")]
-    ask = 'if input("Send to this address? [y/N] ").strip().lower() not in ("y", "yes"):'
+    ask = 'if input("Send to this address? [y/N] ").strip().lower() in ("y", "yes"):'
     ok("sumo_miner.py withdraw still asks 'Send to this address? [y/N]' on the saved-payout path unless --yes is given",
-       ask in wdest and "if sys.stdin.isatty() and not args.yes:" in wdest[:wdest.index(ask)][-120:]
-       and "dest = None" in wdest[wdest.index(ask):wdest.index(ask) + 200])
+       ask in wdest and "if not (sys.stdin.isatty() and not args.yes):" in wdest[:wdest.index(ask)][-120:]
+       and "return check(str(saved))" in wdest[wdest.index(ask):wdest.index(ask) + 200])
     import ast
     parsers = [n for n in ast.walk(ast.parse(miner_src)) if isinstance(n, ast.Call)
                and getattr(n.func, "attr", getattr(n.func, "id", "")) in ("ArgumentParser", "add_parser")]
@@ -336,13 +336,12 @@ def main():
        and "is the OLD guide. Please delete it" in launcher and "The current guide is in the files folder" in launcher)
     sp = miner_src[miner_src.index("def cmd_set_payout"):miner_src.index("def cmd_withdraw")]
     ok("sumo_miner.py set-payout still asks to type YES", 'input("Type YES to save it: ")' in sp)
-    for label, call in (("payout", 'sumo_miner.py set-payout -- "%ADDR%"'), ("withdraw", 'sumo_miner.py withdraw -- "%ADDR%"')):
+    for label, cmd in (("payout", "set-payout"), ("withdraw", "withdraw")):
         sec = launcher[launcher.index("\n:" + label + "\n"):]
         sec = sec[:sec.index("\n:done\n")] if label == "withdraw" else sec[:sec.index("\n:withdraw\n")]
-        strip = 'set "ADDR=%ADDR:"=%"'
-        ok(f"launcher :{label} strips double quotes from the pasted address before using it",
-           strip in sec and sec.index(strip) < sec.index(call))
-        ok(f"launcher :{label} passes the address after -- so it can never be read as an option", call in sec)
+        ok(f"launcher :{label} lets the miner ask for the address (so a bad one is asked again), and never reads or passes one itself",
+           f'"%PY%" sumo_miner.py {cmd}\n' in sec)
+        ok(f"launcher :{label} has no 'set /p' and no ADDR variable", "set /p" not in sec and "ADDR" not in sec and "Enter =" not in sec)
     ok("launcher warns when any of the five old buttons sits next to it, before the menu",
        all(f'if exist "%~dp0{n}" set "OLDBTN=1"' in launcher for n in
            ("Mine SUMO.bat", "Check balance.bat", "Get test SOL.bat", "Set payout address.bat", "Withdraw SOL.bat"))
@@ -370,17 +369,17 @@ def main():
     menu_part, plain_part, pick_part = launcher[menu_at:plain_at], launcher[plain_at:pick_at], launcher[pick_at:]
     ok("launcher: the picture menu is drawn first ('sumo_miner.py menu', errors hidden) and any failure goes to the plain menu",
        '"%PY%" sumo_miner.py menu 2>nul' in menu_part and "if errorlevel 1 goto menu_plain" in menu_part
-       and menu_part.index("sumo_miner.py menu") < menu_part.index("if errorlevel 1 goto menu_plain") < menu_part.index("choice /c 123456 /n >nul")
+       and menu_part.index("sumo_miner.py menu") < menu_part.index("if errorlevel 1 goto menu_plain") < menu_part.index("sumo_miner.py pick")
        and "goto menu_pick" in menu_part)
     ok("launcher: the plain menu text is still all there (items 1-6 and its own 'Press a number from 1 to 6' choice)",
        all(f"echo     {i}   {label}" in plain_part for i, label in enumerate(
            ("Mine SUMO", "Check balance", "Get test SOL", "Set payout address", "Withdraw SOL", "Exit"), 1))
-       and 'choice /c 123456 /n /m "  Press a number from 1 to 6: "' in plain_part)
-    ok("launcher: both menus end in the same key check, highest first (6 5 4 3 2 1), and anything else goes back to the menu",
-       [l.strip() for l in pick_part.split("\n")[2:9]] ==
-       ["if errorlevel 6 goto bye", "if errorlevel 5 goto withdraw", "if errorlevel 4 goto payout",
-        "if errorlevel 3 goto faucet", "if errorlevel 2 goto balance", "if errorlevel 1 goto mine", "goto menu"]
-       and launcher.count("choice /c 123456 /n") == 2 and "if errorlevel" not in plain_part)
+       and '<nul set /p "=  Press a number from 1 to 6: "' in plain_part and '"%PY%" sumo_miner.py pick' in plain_part)
+    ok("launcher: both menus read the key with 'sumo_miner.py pick' (no beep on other keys), check it highest first (16 to 11), and a crash (code below 11) is Exit, never Mine",
+       [l.strip() for l in pick_part.split("\n")[3:10]] ==
+       ["if errorlevel 16 goto bye", "if errorlevel 15 goto withdraw", "if errorlevel 14 goto payout",
+        "if errorlevel 13 goto faucet", "if errorlevel 12 goto balance", "if errorlevel 11 goto mine", "goto bye"]
+       and launcher.count('"%PY%" sumo_miner.py pick') == 2 and "choice" not in launcher and "if errorlevel" not in plain_part)
     ok("launcher: mining from the picture menu clears the screen first; a new wallet is still never made when an old one sits at the top",
        'if exist "%~dp0files\\sumo-devnet-key.json" goto mine_clear' in launcher
        and "\n:mine_clear\ncls\ngoto do_mine\n" in launcher)
@@ -393,9 +392,9 @@ def main():
     ok("launcher MINING line escapes both arrows (^>^>)", "echo  ^>^> MINING" in launcher and ">^>" not in launcher.replace("^>^>", ""))
     ok("launcher no longer sends people to menu option 3 for test SOL (faucet.solana.com is the real route)",
        "choose 3" not in launcher and "https://faucet.solana.com" in launcher)
-    ok("launcher: a single key press picks 1-6; any other key (or Ctrl+C) goes back to the menu, not to mining",
-       "choice /c 123456 /n" in launcher and "if errorlevel 6 goto bye" in launcher
-       and launcher.index("if errorlevel 1 goto mine") < launcher.index("goto menu", launcher.index("if errorlevel 1 goto mine")))
+    ok("launcher: a single key press picks 1-6; Ctrl+C or a crash exits, never mines",
+       "if errorlevel 16 goto bye" in launcher
+       and launcher.index("if errorlevel 11 goto mine") < launcher.index("goto bye", launcher.index("if errorlevel 11 goto mine")))
     def section(label, until=None):
         text = launcher[launcher.index("\n:" + label + "\n"):]
         return text[:text.index("\n:" + until + "\n")] if until else text[:text.index("\n:", 5)]
@@ -412,8 +411,7 @@ def main():
        "Mining stopped." in launcher and launcher.count("goto menu") >= 5 and ":action_failed" in launcher)
     ok("launcher has no ( ) blocks, so a folder like 'sumo (1)' (a repeat download) can't break it",
        not any(l.endswith("(") or l.startswith(")") or l.lower().startswith(("else", "for ")) for l in lines))
-    ok("launcher :withdraw sends an address only when one was typed",
-       "if defined ADDR goto withdraw_to" in launcher and '"%PY%" sumo_miner.py withdraw -- "%ADDR%"' in launcher)
+    ok("launcher no longer reads any typed text itself (the miner does)", "set /p" not in launcher.replace('<nul set /p "=', ""))
     # Every word of every command, also after if / else / & / && || and ( ), not only the first word.
     ok("launcher never copies, moves, renames or deletes anything (every word of every non-echo, non-rem line)",
        file_commands(launcher) == [])

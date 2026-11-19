@@ -106,9 +106,11 @@ def enable_colour(force_plain=False):
 # press a key or Enter), and the miner's draw loop sits inside that blocked write, so it stops
 # collecting a found block and stops watching for a new challenge. Typed keys also pile up in the
 # console's input buffer and get replayed into the .bat file's "pause" afterwards.
-# Fix: while mining, switch QuickEdit, mouse, echo and line input OFF (Ctrl+C stays on), and keep
-# throwing away any keys pressed. The old console mode is put back on exit. Plain ctypes, no extras.
-_ENABLE_PROCESSED_INPUT = 0x0001   # keeps Ctrl+C working
+# Fix: while mining, switch QuickEdit, mouse, echo and line input OFF, and keep throwing away any
+# keys pressed. The old console mode is put back on exit. Plain ctypes, no extras.
+# Processed input is off too, so Ctrl+C arrives as an ordinary key (\x03) instead of a signal. The
+# miner asks "Stop mining? (y/n)" itself, and cmd.exe never sees a Ctrl+C, so its own "Terminate
+# batch job (Y/N)?" question (which only appears after the miner has already stopped) never shows.
 _ENABLE_EXTENDED_FLAGS = 0x0080    # needed so that leaving QuickEdit (0x0040) out really turns it off
 _STD_INPUT_HANDLE = -10
 _input_guard = {"k32": None, "handle": None}
@@ -141,10 +143,51 @@ def flush_console_input():
         pass
 
 
+def read_key():
+    """One key press (waits for it). Arrow and function keys arrive in two parts and give "".
+    Off Windows it reads stdin, and the end of stdin counts as Ctrl+C."""
+    if os.name == "nt":
+        import msvcrt
+        ch = msvcrt.getwch()
+        if ch in ("\x00", "\xe0"):
+            msvcrt.getwch()
+            return ""
+        return ch
+    return sys.stdin.read(1) or "\x03"
+
+
+def pending_keys():
+    """All keys typed since the last call, or "" when quiet_console_input() isn't active."""
+    if _input_guard["k32"] is None or os.name != "nt":
+        return ""
+    import msvcrt
+    keys = ""
+    while msvcrt.kbhit():
+        keys += read_key()
+    return keys
+
+
+def stop_requested(scr, hud):
+    """Called every tick while mining. If Ctrl+C was pressed, ask "Stop mining?" and wait for y or n
+    (mining carries on in the background meanwhile). True = stop."""
+    if "\x03" not in pending_keys():
+        return False
+    scr.event("Stop mining?  Press Y to stop, N to keep mining.")
+    scr.draw(hud)
+    while True:
+        key = read_key().lower()
+        if key in ("y", "\x03"):
+            return True
+        if key in ("n", "\r", "\x1b"):
+            scr.event("OK, still mining.")
+            scr.draw(hud)
+            return False
+
+
 class quiet_console_input:
-    """Context manager: stdin is a real Windows console -> QuickEdit, mouse, echo and line input off
-    (Ctrl+C still works), keys discarded; the old mode is restored on exit. Anywhere else it does
-    nothing. `k32` lets the offline checks pass in a fake kernel32."""
+    """Context manager: stdin is a real Windows console -> QuickEdit, mouse, echo, line input and
+    Ctrl+C-as-a-signal off (Ctrl+C is read as the key \\x03, see stop_requested), keys discarded; the old
+    mode is restored on exit. Anywhere else it does nothing. `k32` lets the offline checks pass in a fake kernel32."""
 
     def __init__(self, k32=None):
         self._k32 = k32
@@ -160,7 +203,7 @@ class quiet_console_input:
             mode = ctypes.c_uint32()
             if not handle or not k32.GetConsoleMode(handle, ctypes.byref(mode)):
                 return self  # stdin is a pipe or file, not a console
-            if not k32.SetConsoleMode(handle, _ENABLE_PROCESSED_INPUT | _ENABLE_EXTENDED_FLAGS):
+            if not k32.SetConsoleMode(handle, _ENABLE_EXTENDED_FLAGS):
                 return self
             self._old = mode.value
             _input_guard.update(k32=k32, handle=handle)
@@ -708,6 +751,39 @@ def check_wallet_account(chain, pk, nothing):
     return acct
 
 
+def ask_line(prompt):
+    """input(), after throwing away any key already waiting in the console, so a stray Enter that was
+    typed earlier can't answer this question before the person has seen it."""
+    if os.name == "nt" and sys.stdin.isatty():
+        try:
+            k32 = _kernel32()
+            k32.FlushConsoleInputBuffer(k32.GetStdHandle(_STD_INPUT_HANDLE))
+        except Exception:
+            pass
+    return input(prompt)
+
+
+def ask_address(prompt, check):
+    """Keep asking until check(text) accepts the answer. check refuses with sys.exit("reason"): the
+    reason is shown and the question comes back. 'back' or 'cancel' gives None; an empty answer asks again."""
+    while True:
+        try:
+            text = ask_line(prompt).strip()
+        except EOFError:
+            sys.exit("No address given.")
+        if text.lower() in ("back", "cancel"):
+            return None
+        if not text:
+            print("Paste an address, or type  back  to cancel.\n")
+            continue
+        try:
+            return check(text)
+        except SystemExit as e:
+            if not isinstance(e.code, str):
+                raise
+            print(f"\n{e.code}\nTry again, or type  back  to cancel.\n")
+
+
 FIX_SAVED = "Fix it by running Set payout address (or: py sumo_miner.py set-payout <address>)."
 
 
@@ -725,19 +801,28 @@ def saved_payout(settings):
 
 
 def cmd_set_payout(args, settings):
-    text = args.address
-    if text is None:
-        text = input("Paste your wallet's PUBLIC address (or 'none'): ")
-    if text.strip().lower() in ("none", "off", "self"):
+    def check(text):
+        if text.strip().lower() in ("none", "off", "self"):
+            return "none"
+        pk = parse_payout(text, settings)
+        try:  # double-check it's a plain wallet, not a token or program account, if we can reach the network
+            check_wallet_account(Chain(settings), pk, "Nothing was saved.")
+        except Exception:  # offline or a network hiccup; SystemExit (a refusal) still stops here
+            print("(Couldn't reach the test network to double-check the address; the miner checks again when it starts.)")
+        return pk
+
+    if args.address is not None:
+        pk = check(args.address)
+    else:
+        pk = ask_address("Paste your wallet's PUBLIC address ('none' = keep rewards in the miner's wallet, "
+                         "'back' = cancel): ", check)
+        if pk is None:
+            sys.exit("Cancelled. Nothing was saved.")
+    if isinstance(pk, str):  # "none"
         if os.path.exists(PAYOUT_FILE):
             os.remove(PAYOUT_FILE)
         print("Payout address removed. Rewards will stay in the miner's own test wallet.")
         return
-    pk = parse_payout(text, settings)
-    try:  # double-check it's a plain wallet, not a token or program account, if we can reach the network
-        check_wallet_account(Chain(settings), pk, "Nothing was saved.")
-    except Exception:  # offline or a network hiccup; SystemExit (a refusal) still stops here
-        print("(Couldn't reach the test network to double-check the address; the miner checks again when it starts.)")
     print(f"\nRewards will be sent to this PUBLIC address:\n\n    {pk}\n")
     print("Check it matches your wallet exactly. Coins sent to a wrong address are lost.\n"
           "Never use an exchange deposit address.")
@@ -791,29 +876,35 @@ def _fee(chain, kp, ixs):
 
 
 def withdraw_destination(args, settings, kp, chain):
-    """The PUBLIC address to send to: the one typed, else the saved payout address (confirmed on
-    screen), else ask. Refuses anything that isn't a plain wallet address."""
+    """The PUBLIC address to send to: the one typed on the command line, else the saved payout address
+    (confirmed on screen), else ask until it's a plain wallet address (or 'back'). Returns (address, its account)."""
     nothing = "Nothing was sent."
+
+    def check(text):
+        dest = parse_payout(text, settings, nothing)
+        if dest == kp.pubkey():
+            sys.exit("That's the miner's own wallet. Withdraw sends coins to a DIFFERENT wallet you control. " + nothing)
+        if dest in (chain.program, chain.config, chain.mint):
+            sys.exit("That's a Sumo Frog program address, not a wallet. " + nothing)
+        return dest, check_wallet_account(chain, dest, nothing)
+
     if args.address:
-        dest = parse_payout(args.address, settings, nothing)
+        return check(args.address)
+    saved = saved_payout(settings)
+    if saved is not None:
+        print(f"Your saved payout address is:\n\n    {saved}\n")
+        if not (sys.stdin.isatty() and not args.yes):
+            return check(str(saved))
+        if input("Send to this address? [y/N] ").strip().lower() in ("y", "yes"):
+            return check(str(saved))
     else:
-        dest = saved_payout(settings)
-        if dest is not None:
-            print(f"Your saved payout address is:\n\n    {dest}\n")
-            if sys.stdin.isatty() and not args.yes:
-                if input("Send to this address? [y/N] ").strip().lower() not in ("y", "yes"):
-                    dest = None
-        else:
-            print("No payout address saved yet, so please paste one.\n")
-        if dest is None:
-            if not sys.stdin.isatty():
-                sys.exit("No address given. Run: py sumo_miner.py withdraw <your wallet's PUBLIC address>")
-            dest = parse_payout(input("Paste your wallet's PUBLIC address to send to: "), settings, nothing)
-    if dest == kp.pubkey():
-        sys.exit("That's the miner's own wallet. Withdraw sends coins to a DIFFERENT wallet you control. " + nothing)
-    if dest in (chain.program, chain.config, chain.mint):
-        sys.exit("That's a Sumo Frog program address, not a wallet. " + nothing)
-    return dest, check_wallet_account(chain, dest, nothing)
+        print("No payout address saved yet, so please paste one.\n")
+    if not sys.stdin.isatty():
+        sys.exit("No address given. Run: py sumo_miner.py withdraw <your wallet's PUBLIC address>")
+    got = ask_address("Paste your wallet's PUBLIC address to send to ('back' = cancel): ", check)
+    if got is None:
+        sys.exit("Cancelled. Nothing was sent.")
+    return got
 
 
 def cmd_withdraw(args, settings):
@@ -1016,7 +1107,8 @@ def cmd_mine(args, settings):
                        reward_won="")
 
             def tick(hashes, rate):
-                flush_console_input()
+                if stop_requested(scr, hud):
+                    raise KeyboardInterrupt
                 hud.update(guesses=hashes, rate=rate_text(rate))
                 scr.draw(hud)
 
@@ -1209,6 +1301,21 @@ def cmd_menu(args, settings):
         sys.exit(1)
 
 
+def cmd_pick(args, settings):
+    """Wait for a key 1-6 and exit with 10 + that number (11 to 16), for the launcher's menu. Any other
+    key is ignored without a sound (the batch file's `choice` beeps). Ctrl+C or any trouble exits 16
+    (Exit); the launcher treats every code below 11 (a crash) as Exit too, never as Mine."""
+    try:
+        while True:
+            key = read_key()
+            if key and key in "123456":
+                sys.exit(10 + int(key))
+            if key == "\x03":
+                sys.exit(16)
+    except (KeyboardInterrupt, Exception):
+        sys.exit(16)
+
+
 def cmd_balance(args, settings):
     chain = Chain(settings)
     kp = load_key(args.keypair)
@@ -1373,7 +1480,7 @@ def _main():
     # allow_abbrev=False: "--ye" or "--y" must NOT quietly mean "--yes" (which skips the y/N questions).
     ap = argparse.ArgumentParser(description="Sumo Frog miner (test networks only, worthless test coins)",
                                  allow_abbrev=False)
-    ap.add_argument("command", choices=["mine", "status", "balance", "new-key", "faucet", "set-payout", "withdraw", "menu"])
+    ap.add_argument("command", choices=["mine", "status", "balance", "new-key", "faucet", "set-payout", "withdraw", "menu", "pick"])
     ap.add_argument("address", nargs="?", help="for set-payout or withdraw: your wallet's PUBLIC address (set-payout also takes 'none')")
     ap.add_argument("--keypair", default=os.path.join(HERE, "sumo-devnet-key.json"),
                     help="the miner's own test wallet file (pays the test fees)")
@@ -1390,8 +1497,8 @@ def _main():
         settings["rpc"] = args.rpc
     run = {"mine": cmd_mine, "status": cmd_status, "balance": cmd_balance, "new-key": cmd_new_key,
            "faucet": cmd_faucet, "set-payout": cmd_set_payout, "withdraw": cmd_withdraw,
-           "menu": cmd_menu}[args.command]
-    if args.command == "mine":
+           "menu": cmd_menu, "pick": cmd_pick}[args.command]
+    if args.command in ("mine", "pick"):
         with quiet_console_input():
             run(args, settings)
     else:

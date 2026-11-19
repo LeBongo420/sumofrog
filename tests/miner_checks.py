@@ -261,4 +261,101 @@ label, shown = check_shown(LOCAL_GENESIS, "http://127.0.0.1:8899", priv)
 ok("private label on localhost: warns, still runs",
    label == "local test validator" and "Warning" in shown)
 
+
+# ---- 19 Nov: a refused address asks again (set-payout and withdraw) instead of dumping back to the menu ----
+import builtins  # noqa: E402
+import contextlib  # noqa: E402
+import io  # noqa: E402
+
+
+class Tty:
+    def isatty(self):
+        return True
+
+
+def scripted(answers, fn, *a):
+    """Run fn with ask_line (and input) answering from `answers`; returns (result, printed text, answers left)."""
+    left, out, old = list(answers), io.StringIO(), (m.ask_line, builtins.input, sys.stdin)
+
+    def nxt(prompt=""):
+        out.write("<" + prompt + ">")
+        if not left:
+            raise EOFError
+        return left.pop(0)
+    m.ask_line, builtins.input, sys.stdin = nxt, nxt, Tty()
+    try:
+        with contextlib.redirect_stdout(out):
+            try:
+                res = fn(*a)
+            except SystemExit as e:
+                res = ("EXIT", str(e.code))
+    finally:
+        m.ask_line, builtins.input, sys.stdin = old
+    return res, out.getvalue(), left
+
+
+ISSUE = ("SUMO", "x" * 50, "word " * 12, "")
+res, shown, left = scripted([*ISSUE, "back"], m.ask_address, "ask: ", lambda t: m.parse_payout(t, S))
+ok("ask_address: bad answers (short text, too long, seed words, empty) each ask again; back gives None",
+   res is None and left == [] and shown.count("Try again, or type  back  to cancel.") == 3
+   and "isn't a valid Solana address" in shown and "Paste an address, or type  back" in shown)
+res, shown, left = scripted(["SUMO", " " + str(WALLET) + " ", "unused"], m.ask_address, "ask: ", lambda t: m.parse_payout(t, S))
+ok("ask_address: after a bad one the right address is accepted (spaces trimmed) and nothing more is asked",
+   res == WALLET and left == ["unused"])
+ok("ask_address: end of input (no keyboard) stops with a plain message instead of looping",
+   scripted([], lambda: m.ask_address("ask: ", lambda t: t))[0][0] == "EXIT")
+
+with tempfile.TemporaryDirectory() as td:
+    old_file, old_chain = m.PAYOUT_FILE, m.Chain
+    m.PAYOUT_FILE = os.path.join(td, "payout-address.txt")
+
+    def no_net(settings):
+        raise OSError("offline")
+    m.Chain = no_net
+    sp_args = types.SimpleNamespace(address=None, yes=True)
+    try:
+        res, shown, left = scripted(["SUMO", str(WALLET)], m.cmd_set_payout, sp_args, S)
+        ok("set-payout: 'SUMO' is refused, asked again, and the right address is then saved",
+           res is None and left == [] and "Nothing was saved." in shown
+           and open(m.PAYOUT_FILE).read().strip() == str(WALLET))
+        res, shown, left = scripted(["SUMO", "back"], m.cmd_set_payout, sp_args, S)
+        ok("set-payout: 'back' cancels cleanly and leaves the saved address alone",
+           res == ("EXIT", "Cancelled. Nothing was saved.") and open(m.PAYOUT_FILE).read().strip() == str(WALLET))
+        res, shown, left = scripted(["none"], m.cmd_set_payout, sp_args, S)
+        ok("set-payout: 'none' still removes the payout address", not os.path.exists(m.PAYOUT_FILE) and "removed" in shown)
+        res, shown, left = scripted([str(PROGRAM), str(WALLET)], m.cmd_set_payout, sp_args, S)
+        ok("set-payout: a program address is refused and asked again too",
+           "Sumo Frog program address" in shown and open(m.PAYOUT_FILE).read().strip() == str(WALLET))
+        ok("set-payout: an address given on the command line is still refused outright (no prompt)",
+           "isn't a valid" in refused(m.cmd_set_payout, types.SimpleNamespace(address="SUMO", yes=True), S))
+    finally:
+        m.PAYOUT_FILE, m.Chain = old_file, old_chain
+
+miner_kp = Keypair()
+fake_chain = types.SimpleNamespace(program=PROGRAM, config=CONFIG, mint=MINT)
+old_acct, old_saved = m._account, m.saved_payout
+m._account = lambda chain, pk: None
+wd_args = types.SimpleNamespace(address=None, yes=False)
+try:
+    m.saved_payout = lambda settings: None
+    res, shown, left = scripted(["SUMO", str(miner_kp.pubkey()), str(WALLET)], m.withdraw_destination, wd_args, S, miner_kp, fake_chain)
+    ok("withdraw, no payout saved: no 'Enter = payout address', one prompt that asks again until it's a valid wallet",
+       res == (WALLET, None) and left == [] and "No payout address saved yet" in shown and "Enter =" not in shown
+       and "isn't a valid" in shown and "miner's own wallet" in shown and shown.count("<Paste your wallet's PUBLIC address to send to") == 3)
+    res, shown, left = scripted([""], m.withdraw_destination, wd_args, S, miner_kp, fake_chain)
+    ok("withdraw, no payout saved: an empty answer asks again (it is not read as 'no address given')",
+       left == [] and res == ("EXIT", "No address given.") and "Paste an address, or type  back" in shown)
+    res, shown, left = scripted(["back"], m.withdraw_destination, wd_args, S, miner_kp, fake_chain)
+    ok("withdraw: 'back' cancels with Nothing was sent", res == ("EXIT", "Cancelled. Nothing was sent."))
+    m.saved_payout = lambda settings: WALLET
+    res, shown, left = scripted(["y"], m.withdraw_destination, wd_args, S, miner_kp, fake_chain)
+    ok("withdraw, payout saved: shows it and 'y' uses it", res == (WALLET, None) and left == [])
+    res, shown, left = scripted(["n", "SUMO", "back"], m.withdraw_destination, wd_args, S, miner_kp, fake_chain)
+    ok("withdraw, payout saved but 'n': asks for another address, again on a bad one",
+       res == ("EXIT", "Cancelled. Nothing was sent.") and "isn't a valid" in shown)
+    ok("withdraw: an address given on the command line is still refused outright",
+       "isn't a valid" in refused(m.withdraw_destination, types.SimpleNamespace(address="SUMO", yes=True), S, miner_kp, fake_chain))
+finally:
+    m._account, m.saved_payout = old_acct, old_saved
+
 print(f"miner checks: {passed} passed")
