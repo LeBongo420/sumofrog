@@ -562,7 +562,7 @@ ok("menu: has the frog, the SUMO logo, FROG MINER, TEST COINS / TEST CHAIN, the 
 ok("menu: the [1] row is the highlighted one (arrow + inverted bar)", "\u25ba [1] Mine SUMO" in rows[19] and "\u25ba" not in rows[20])
 ok("menu: shows the real short wallet and the real balance (1.50 SUMO)", m.short(kp.pubkey()) in rows[14] and "1.50 SUMO" in rows[15])
 old_version = m.VERSION
-ok("menu: shows VERSION (v0.6.2 today), not the mockup's v0.5", m.VERSION in rows[10] and "v0.5" not in "".join(rows.values()) and m.VERSION == "v0.6.2")
+ok("menu: shows VERSION (v0.6.3 today), not the mockup's v0.5", m.VERSION in rows[10] and "v0.5" not in "".join(rows.values()) and m.VERSION == "v0.6.3")
 m.VERSION = "v9.8.7"
 ok("menu: the version comes from VERSION, not a fixed string", "v9.8.7" in visible_rows(m.menu_text(SET, KEYFILE, 80, 30))[10])
 m.VERSION = old_version

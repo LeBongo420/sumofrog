@@ -49,7 +49,7 @@ from solders.pubkey import Pubkey
 from solders.transaction import Transaction
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-VERSION = "v0.6.2"
+VERSION = "v0.6.3"
 DEVNET_GENESIS = "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
 MAINNET_GENESIS = "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"
 TOKEN_PROGRAM = Pubkey.from_string("TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA")
