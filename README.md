@@ -70,8 +70,8 @@ miner notices and moves on to the new one.
 
 ## Mining on Windows
 
-**Easiest way (no Python knowledge needed):** unzip `docs/downloads/sumo-miner-v0.6.3-devnet.zip` into a folder and double-click
-`SUMO Frog.bat`. Check the file: SHA-256 `996a49995fcab528dbdc9a961dce5d956a51987d899bd0ddd6ab475b91d66107`.
+**Easiest way (no Python knowledge needed):** unzip `docs/downloads/sumo-miner-v0.6.4-devnet.zip` into a folder and double-click
+`SUMO Frog.bat`. Check the file: SHA-256 `b8d98d564385cd73793f749128509ec6b2a96fe0c3f9fe292c406038a3938817`.
 The zip is already set to public Solana devnet; there is nothing to edit. A menu appears: press **1** to mine.
 The first time, it makes a test wallet and shows its address. Get free test SOL at
 https://faucet.solana.com (sign in with GitHub, pick Devnet, paste that address), then press **1** again.

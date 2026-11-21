@@ -19,7 +19,7 @@ Not sure if you have it? Skip this step. If Python is missing, the miner says "P
 
 ## 2. Download and unzip the miner
 
-1. Download the miner: **[sumo-miner-v0.6.3-devnet.zip](downloads/sumo-miner-v0.6.3-devnet.zip)**. Check the file: SHA-256 `996a49995fcab528dbdc9a961dce5d956a51987d899bd0ddd6ab475b91d66107`.
+1. Download the miner: **[sumo-miner-v0.6.4-devnet.zip](downloads/sumo-miner-v0.6.4-devnet.zip)**. Check the file: SHA-256 `b8d98d564385cd73793f749128509ec6b2a96fe0c3f9fe292c406038a3938817`.
 2. Right-click the zip and choose **Extract All…**, then click **Extract**.
 3. Open the new folder. You'll see **SUMO Frog.bat** and **START HERE.txt** on top, and a **files** folder with everything else. There is nothing to edit: this zip is already set to public Solana devnet.
 
