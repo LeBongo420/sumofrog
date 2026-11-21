@@ -4,7 +4,8 @@
   docs/whitepaper.md   -> docs/whitepaper.html
   docs/mining-guide.md -> docs/mining-guide.html
   (template below)     -> docs/index.html    (home page)
-  (template below)     -> stats/index.html   (the stats page; default RPC is public devnet)
+  (template below)     -> stats/index.html and docs/stats/index.html
+  (docs/stats is the GitHub Pages copy, with a public-devnet config; default RPC is public devnet)
   mockups_8bit/v4      -> home header + metadata frog in docs/, stats/ and assets/
   art/pixy             -> per-page headers, $SUMO token logo and favicons
 
@@ -128,7 +129,7 @@ def page(title, nav, body, foot="", script="", header=None):
 
 def docs_nav(current):
     items = [("index.html", "HOME"), ("mining-guide.html", "GUIDE"), ("whitepaper.html", "PAPER"),
-             ("../stats/index.html", "STATS")]
+             ("stats/", "STATS")]
     return "".join(f'<a href="{h}"{" aria-current=page" if h == current else ""}>{t}</a>' for h, t in items)
 
 
@@ -248,7 +249,7 @@ double-click <strong>Mine SUMO</strong>. Full steps, screenshots and safety note
 <ul>
 <li><a href="whitepaper.html">Whitepaper</a> — the full rules</li>
 <li><a href="mining-guide.html">Mining guide</a> — how to run the test miner</li>
-<li><a href="../stats/index.html">Stats</a> — live blocks, reward and top miners (reads public devnet)</li>
+<li><a href="stats/">Stats</a> — live blocks, reward and top miners (reads public devnet)</li>
 <li><a href="https://github.com/LeBongo420/sumofrog">Code on GitHub</a> — private for now; link is a placeholder until the repo is published</li>
 </ul>
 <p>There are <strong>no official social media accounts</strong>. The author's personal X handle is
@@ -268,12 +269,15 @@ def stats_page():
     global CSS
     base = CSS
     CSS = base + STATS_CSS
-    nav = '<a href="../docs/index.html">HOME</a><a href="./" aria-current=page>STATS</a>'
     foot = 'Program <a id="plink"></a> &middot; Mint <a id="mlink"></a> &middot; refreshes every 20s<br>'
-    html = page("SUMO FROG ($SUMO) stats", nav, STATS_BODY, foot, STATS_SCRIPT, header=STATS_HEADER)
+    local_nav = '<a href="../docs/index.html">HOME</a><a href="./" aria-current=page>STATS</a>'
+    pages_nav = '<a href="../index.html">HOME</a><a href="./" aria-current=page>STATS</a>'
+    local_html = page("SUMO FROG ($SUMO) stats", local_nav, STATS_BODY, foot, STATS_SCRIPT, header=STATS_HEADER)
+    pages_html = page("SUMO FROG ($SUMO) stats", pages_nav, STATS_BODY, foot, STATS_SCRIPT, header=STATS_HEADER)
     CSS = base
-    open(os.path.join(ROOT, "stats", "index.html"), "w", encoding="utf-8").write(html)
-    print("wrote stats/index.html")
+    open(os.path.join(ROOT, "stats", "index.html"), "w", encoding="utf-8").write(local_html)
+    publish_docs_stats(pages_html)
+    print("wrote stats/index.html and docs/stats/index.html")
 
 
 def save_jpeg(src, dest, max_w=1200, quality=85):
@@ -324,6 +328,7 @@ EXAMPLE_STATS = os.path.join(ROOT, "stats", "sumo_config.example.js")
 LIVE_STATS = os.path.join(ROOT, "stats", "sumo_config.js")
 LIVE_STATS_DIR = os.path.join(ROOT, "stats")
 LIVE_DOCS_DIR = os.path.join(ROOT, "docs")
+PAGES_STATS_DIR = os.path.join(ROOT, "docs", "stats")
 IPV4 = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 DEVNET_HOST = "api.devnet.solana.com"
 # Web files copied into a publish folder. Source markdown, fonts and screens stay out.
@@ -339,6 +344,9 @@ STATS_PUBLISH = (
     "sumo_frog.png", "favicon-16.png", "favicon-32.png", "apple-touch-icon.png",
     "header_stats.jpg",
 )
+# Files copied into docs/stats/ (the GitHub Pages copy). sumo_config.js is written
+# separately from the example, never from the gitignored live stats/sumo_config.js.
+STATS_ASSET_FILES = tuple(n for n in STATS_PUBLISH if n != "index.html")
 
 
 def is_same_or_inside(path, parent):
@@ -465,6 +473,49 @@ def publishable_stats_config(kind="devnet"):
     return out
 
 
+def publish_docs_stats(html):
+    """Write the public-devnet stats page into docs/stats/ for GitHub Pages.
+
+    Pages serves the docs/ folder, so this is https://lebongo420.github.io/sumofrog/stats/.
+    The config is built from the tracked example only — never from the gitignored
+    live stats/sumo_config.js — and is refused if it is not a public-devnet setting.
+    """
+    dest_dir = os.path.abspath(PAGES_STATS_DIR)
+    dest_cfg = os.path.join(dest_dir, "sumo_config.js")
+    if os.path.isfile(LIVE_STATS):
+        try:
+            if os.path.lexists(dest_cfg) and os.path.samefile(dest_cfg, LIVE_STATS):
+                raise SystemExit("refusing to overwrite the real stats/sumo_config.js")
+        except OSError:
+            pass
+    if os.path.islink(dest_dir) or os.path.islink(dest_cfg):
+        raise SystemExit("refusing to write docs/stats through a symlink")
+    os.makedirs(dest_dir, exist_ok=True)
+    write_file_atomic(os.path.join(dest_dir, "index.html"), html)
+    for name in STATS_ASSET_FILES:
+        if name == "sumo_config.js":
+            raise SystemExit("internal error: live stats config must not be in the asset list")
+        src = os.path.join(LIVE_STATS_DIR, name)
+        if not os.path.isfile(src):
+            raise SystemExit(f"missing stats/{name}")
+        # Copy from the tracked sibling in stats/, never sumo_config.js.
+        if os.path.abspath(src) == os.path.abspath(LIVE_STATS):
+            raise SystemExit("internal error: refused to copy the live stats config")
+        shutil.copy2(src, os.path.join(dest_dir, name))
+    cfg = publishable_stats_config("devnet")
+    if not stats_config_is_publishable(cfg):
+        raise SystemExit("refusing to write a docs/stats config that is not a public-devnet setting")
+    if "api.devnet.solana.com" not in cfg:
+        raise SystemExit("docs/stats config must use public devnet")
+    write_file_atomic(dest_cfg, cfg)
+    if os.path.isfile(LIVE_STATS):
+        try:
+            if os.path.samefile(dest_cfg, LIVE_STATS):
+                raise SystemExit("publish guard failed: docs/stats config is the live file")
+        except OSError:
+            pass
+
+
 def write_publishable_stats_config(dest_dir, kind="devnet"):
     refuse_live_publish_dest(dest_dir, "published config")
     dest_dir = os.path.abspath(dest_dir)
@@ -507,13 +558,15 @@ def stage_public_site(dest, kind="devnet"):
     if os.path.lexists(stats_dest):
         raise SystemExit("refusing to write a public site into a non-empty folder")
     os.makedirs(stats_dest, exist_ok=True)
+    # Copy the Pages stats page from docs/stats/ (HOME links to ../index.html).
+    # Never use the gitignored live stats/sumo_config.js as a source.
     for name in STATS_PUBLISH:
         if name == "sumo_config.js":
             raise SystemExit("internal error: real stats config must not be in the copy list")
-        rel = os.path.join("stats", name)
+        rel = os.path.join("docs", "stats", name)
         src = require_tracked(rel)
         if not os.path.isfile(src):
-            raise SystemExit(f"missing stats/{name}")
+            raise SystemExit(f"missing docs/stats/{name}")
         copy_file_atomic(src, os.path.join(stats_dest, name))
     # Explicitly skip LIVE_STATS and the example filename (the published file is always sumo_config.js).
     write_publishable_stats_config(stats_dest, kind)

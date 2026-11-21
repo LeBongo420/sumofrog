@@ -1,5 +1,7 @@
 # Sumo Frog private test network (Oracle server)
 
+**Retired: old private Oracle test network, switched off 21 Nov 2026, not used for the public devnet launch.**
+
 Worthless test network. No mainnet, no real funds, no keys on the server.
 
 | | |

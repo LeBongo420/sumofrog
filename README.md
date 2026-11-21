@@ -12,7 +12,7 @@ A toy coin you can mine with your PC, living on **Solana's public devnet**.
 | Token mint | `7VNZhAWFCKjrZVKcbU2sXxT5mNAbzYh8qmtD7HfePabR` |
 | Game state | `AjCSGvVNV2FcDxGjMQbc2QEuJMx144XpuivkDX4e4Pad` |
 | Network | Solana public devnet (`https://api.devnet.solana.com`) |
-| Stats page | `stats/index.html` (reads public devnet directly) |
+| Stats page | `docs/stats/index.html` (on GitHub Pages: `/stats/`; reads public devnet directly) |
 | Explorer | [program](https://explorer.solana.com/address/6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW?cluster=devnet), [mint](https://explorer.solana.com/address/7VNZhAWFCKjrZVKcbU2sXxT5mNAbzYh8qmtD7HfePabR?cluster=devnet) |
 
 The old private test gateway (port 8080) is retired and is no longer running.
@@ -123,7 +123,7 @@ retired private test-network path that is no longer running. It always refuses m
 
 ## Stats page
 
-Open `stats/index.html`. It reads public Solana devnet (`https://api.devnet.solana.com`) and shows:
+Open `docs/stats/index.html`, or click **Stats** on the site. It reads public Solana devnet (`https://api.devnet.solana.com`) and shows:
 
 - blocks mined
 - difficulty

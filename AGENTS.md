@@ -1,5 +1,7 @@
 # Notes for AI agents working on Sumo Frog
 
+**Retired: old private Oracle test network, switched off 21 Nov 2026, not used for the public devnet launch.**
+
 Sumo Frog is a toy proof-of-work token on a **private Solana test validator / devnet only**.
 It has no value. Never touch mainnet, real wallets, seed phrases or real SOL. Never print or
 commit anything in `.keys/` or `.env`.
@@ -27,5 +29,6 @@ commit anything in `.keys/` or `.env`.
 
 ## Deploying
 
-Changing the program means the Oracle validator runs old code until someone redeploys.
-Don't redeploy or restart anything on the Oracle server yourself; say a redeploy is needed.
+The old private Oracle test network is retired (switched off 21 Nov 2026) and is not used
+for the public devnet launch. Don't redeploy or restart anything on the Oracle server
+yourself; say a redeploy is needed.

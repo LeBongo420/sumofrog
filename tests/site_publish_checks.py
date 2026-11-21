@@ -127,6 +127,12 @@ def main():
        and os.path.isfile(os.path.join(dest, "sumo_frog.png")))
     ok("home page was staged", os.path.isfile(os.path.join(dest, "index.html")))
     ok("stats page was staged under dest/stats", os.path.isfile(os.path.join(dest, "stats", "index.html")))
+    staged_home = open(os.path.join(dest, "index.html"), encoding="utf-8").read()
+    ok("staged home page Stats link is relative stats/",
+       'href="stats/"' in staged_home and "../stats/" not in staged_home)
+    staged_stats = open(os.path.join(dest, "stats", "index.html"), encoding="utf-8").read()
+    ok("staged stats HOME link is ../index.html (Pages layout)",
+       'href="../index.html"' in staged_stats and "../docs/" not in staged_stats)
     # dest/stats is not the live tree
     ok("staged stats dir is not the live stats/ tree",
        os.path.realpath(os.path.join(dest, "stats")) != stats)
@@ -523,6 +529,35 @@ def main():
         ok(f"{guide}: never tells people to copy the wallet file",
            "copy sumo-devnet-key" not in flat.lower() and "copy it" not in flat.lower())
         ok(f"{guide}: explains the 'Two wallets found' stop", "Two wallets found" in flat)
+    # GitHub Pages serves docs/, so the stats page must live at docs/stats/ with a relative link.
+    for rel in ("docs/index.html", "docs/mining-guide.html", "docs/whitepaper.html"):
+        html = open(os.path.join(b.ROOT, rel), encoding="utf-8").read()
+        ok(f"{rel}: Stats link is relative stats/, not ../stats/",
+           'href="stats/"' in html and "../stats/" not in html)
+    pages_stats = os.path.join(b.ROOT, "docs", "stats")
+    pages_cfg = os.path.join(pages_stats, "sumo_config.js")
+    ok("docs/stats/index.html exists for Pages",
+       os.path.isfile(os.path.join(pages_stats, "index.html")))
+    pages_html = open(os.path.join(pages_stats, "index.html"), encoding="utf-8").read()
+    ok("docs/stats HOME link stays inside the docs/ site",
+       'href="../index.html"' in pages_html and "../docs/" not in pages_html)
+    ok("docs/stats/sumo_config.js is a regular file",
+       os.path.isfile(pages_cfg) and not os.path.islink(pages_cfg))
+    pages_cfg_text = open(pages_cfg, encoding="utf-8").read()
+    ok("docs/stats config is publishable public devnet",
+       b.stats_config_is_publishable(pages_cfg_text)
+       and "api.devnet.solana.com" in pages_cfg_text
+       and "YOUR_SERVER" not in pages_cfg_text and ":8080" not in pages_cfg_text)
+    ok("docs/stats config is not the gitignored live file",
+       os.path.realpath(pages_cfg) != os.path.realpath(os.path.join(b.ROOT, "stats", "sumo_config.js")))
+    r = subprocess.run(["git", "-C", b.ROOT, "check-ignore", "-q", "docs/stats/sumo_config.js"])
+    ok("docs/stats/sumo_config.js is not gitignored", r.returncode == 1)
+    r = subprocess.run(["git", "-C", b.ROOT, "ls-files", "--error-unmatch", "--", "docs/stats/sumo_config.js"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    ok("docs/stats/sumo_config.js is tracked", r.returncode == 0)
+    for name in b.STATS_ASSET_FILES:
+        ok(f"docs/stats/{name} is present", os.path.isfile(os.path.join(pages_stats, name)))
+
     # Public-safe metadata (Ribbit review 21 Nov): tracked docs/ file + example, no gateway.
     for rel in ("docs/metadata.json", "assets/metadata.example.json"):
         meta = open(os.path.join(b.ROOT, rel), encoding="utf-8").read()
