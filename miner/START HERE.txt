@@ -21,5 +21,5 @@ Never put a real wallet, seed phrase or private key anywhere.
 
 4. Double-click  Mine SUMO.bat again. Mining starts.
 
-The usual way to mine is the v0.6.3 zip (a single SUMO Frog.bat menu). See the
+The usual way to mine is the v0.6.4 zip (a single SUMO Frog.bat menu). See the
 mining guide. Full steps, payout address and withdraw: see HOW TO MINE.txt

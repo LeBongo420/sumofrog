@@ -8,7 +8,7 @@ First time on this PC (or updating the old folder)
    existing miner folder if you're updating, and say "Replace the files" if Windows asks.
    Your wallet file sumo-devnet-key.json is NOT in the zip, so it stays as it is.
    Never delete it: it holds your test SUMO.
-4. If you are using this folder from the repo (not the v0.6.3 zip), copy
+4. If you are using this folder from the repo (not the v0.6.4 zip), copy
    sumo_config.example.json to sumo_config.json if you don't already have one.
    It is already set to public Solana devnet. There is nothing to edit.
 5. Open that folder and double-click  Mine SUMO.bat
@@ -20,7 +20,7 @@ First time on this PC (or updating the old folder)
    paste that address), then double-click Mine SUMO.bat again. Mining starts.
 8. To stop, close the miner window, or press Ctrl+C in it.
 
-The usual way to mine is the v0.6.3 zip: that one has a single SUMO Frog.bat menu
+The usual way to mine is the v0.6.4 zip: that one has a single SUMO Frog.bat menu
 and a short START HERE.txt. This file is for the source folder in the repo.
 
 What the numbers mean
