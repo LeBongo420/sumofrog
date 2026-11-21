@@ -1,17 +1,25 @@
-SUMO FROG MINER — START HERE  (test coins only, no real money)
+SUMO FROG MINER - START HERE  (test coins only, no real money)
 ==============================================================
+
+This miner is already set to Solana's public devnet. Test SUMO is worthless.
+Never put a real wallet, seed phrase or private key anywhere.
 
 1. Copy sumo_config.example.json and rename the copy to sumo_config.json
    (on Windows: right-click the example, Copy, Paste, then rename).
+   It is already set to public devnet. There is nothing to edit.
 
-2. Open sumo_config.json in Notepad. Replace YOUR_SERVER with the test
-   gateway address you were given. Leave "network" set to "private" unless
-   you were told to switch it to "devnet". Save. The miner cannot connect
-   until you do this. Never put a real wallet, seed phrase or private key here.
-
-3. Double-click  Mine SUMO.bat
+2. Double-click  Mine SUMO.bat
    If Windows says "Windows protected your PC", click "More info" then
    "Run anyway". It's a plain text script: right-click it and choose Edit
    to see what it does.
+   The first time, it makes a test wallet and shows its address. It will then
+   say it needs test SOL: that's normal, go to step 3.
 
-Full steps, payout address and withdraw: see HOW TO MINE.txt
+3. Get free test SOL: open https://faucet.solana.com, sign in with GitHub,
+   pick "Devnet", paste the wallet address from step 2, and request the most
+   it allows.
+
+4. Double-click  Mine SUMO.bat again. Mining starts.
+
+The usual way to mine is the v0.6.3 zip (a single SUMO Frog.bat menu). See the
+mining guide. Full steps, payout address and withdraw: see HOW TO MINE.txt

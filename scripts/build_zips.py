@@ -60,7 +60,7 @@ DEVNET_INNER = [
 DEVNET_LAYOUT = DEVNET_TOP + [(f"{DEVNET_FILES_DIR}/{a}", src) for a, src in DEVNET_INNER]
 FORBIDDEN_NAMES = ("sumo_config.json", "payout-address", ".venv", "keypair",
                    "id.json", "sumo-devnet-key", ".keys", "target/")
-# Hosts allowed in the example: placeholder only.
+# Hosts allowed in packed text files: no raw public IPv4 (loopback is skipped below).
 HOST_OK = re.compile(r"YOUR_SERVER")
 IPV4 = re.compile(rb"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 KEYPAIR = re.compile(rb"\[\s*(?:\d{1,3}\s*,\s*){31,}\d{1,3}\s*\]")
@@ -160,7 +160,7 @@ def check_payload(name, data, ips):
             s = hit.decode()
             if s.startswith("127.") or s.startswith("0.") or s.startswith("255."):
                 continue
-            # allow nothing else — example must use YOUR_SERVER
+            # allow nothing else — public hostnames only, never a raw IPv4
             raise SystemExit(f"unexpected address in {name}")
 
 

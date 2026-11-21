@@ -44,6 +44,9 @@ def load_test_settings():
 
 
 S = load_test_settings()
+# Retired private-network path, for guard tests only. Never use a live server address.
+PRIVATE_GENESIS = "9eDPpAG4RUei7HTciCEucnshXm6Rfo61d6KU8hyXwx6n"
+PRIVATE_RPC = "http://YOUR_SERVER:8080"
 PROGRAM = Pubkey.from_string(S["program_id"])
 CONFIG = Pubkey.find_program_address([b"config"], PROGRAM)[0]
 MINT = Pubkey.find_program_address([b"mint"], PROGRAM)[0]
@@ -99,7 +102,7 @@ os.remove(m.PAYOUT_FILE)
 
 # with a network: an on-curve address that's a token or program account is refused
 tok_owner = Keypair().pubkey()  # a non-ATA token account has an ordinary on-curve address
-chain = types.SimpleNamespace(rpc=FakeRpc(S["private_genesis"], {
+chain = types.SimpleNamespace(rpc=FakeRpc(PRIVATE_GENESIS, {
     str(tok_owner): {"owner": str(m.TOKEN_PROGRAM), "executable": False},
     str(WALLET): {"owner": str(m.SYSTEM_PROGRAM), "executable": False},
 }))
@@ -126,11 +129,12 @@ ok("...before any network call", r.calls == 0)
 ok("file:// refused", "https" in refused(m.check_devnet, FakeRpc(LOCAL_GENESIS), "file:///etc/passwd", S))
 ok("mainnet refused", "MAINNET" in refused(m.check_devnet, FakeRpc(m.MAINNET_GENESIS), "https://api.mainnet-beta.solana.com", S))
 # the shipped private network link (plain http) keeps working when the genesis matches
-ok("shipped private http ok", m.check_devnet(FakeRpc(S["private_genesis"]), S["rpc"], S) == "private Sumo test network")
+PRIV = dict(S, network="private", rpc=PRIVATE_RPC, private_genesis=PRIVATE_GENESIS, _shipped_rpc=PRIVATE_RPC)
+ok("shipped private http ok", m.check_devnet(FakeRpc(PRIVATE_GENESIS), PRIVATE_RPC, PRIV) == "private Sumo test network")
 ok("shipped http link, wrong network refused", "isn't the private" in refused(
-    m.check_devnet, FakeRpc(m.DEVNET_GENESIS), S["rpc"], S))
+    m.check_devnet, FakeRpc(m.DEVNET_GENESIS), PRIVATE_RPC, PRIV))
 ok("other http link refused even if it claims the private genesis", "encrypted" in refused(
-    m.check_devnet, FakeRpc(S["private_genesis"]), "http://other.example:8080", S))
+    m.check_devnet, FakeRpc(PRIVATE_GENESIS), "http://other.example:8080", PRIV))
 
 # ---- private http link: plain warning at startup and before withdraw (Josh, 2 Nov 2026) ----
 import contextlib  # noqa: E402
@@ -141,19 +145,24 @@ NOTE = ("Note: the private test link isn't encrypted. Fine for test coins with n
 ok("exact wording", m.HTTP_NOTE == NOTE)
 
 
-def make_chain(url, genesis):
+def make_chain(url, genesis, extra=None):
     orig = m.Rpc
     m.Rpc = lambda u: FakeRpc(genesis)
     try:
         out = io.StringIO()
+        cfg = dict(S, rpc=url)
+        if extra:
+            cfg.update(extra)
         with contextlib.redirect_stdout(out):
-            c = m.Chain(dict(S, rpc=url))
+            c = m.Chain(cfg)
         return c, out.getvalue()
     finally:
         m.Rpc = orig
 
 
-c, shown = make_chain(S["rpc"], S["private_genesis"])
+c, shown = make_chain(PRIVATE_RPC, PRIVATE_GENESIS, {
+    "network": "private", "private_genesis": PRIVATE_GENESIS, "_shipped_rpc": PRIVATE_RPC,
+})
 ok("private http link: flagged", c.unencrypted)
 ok("private http link: note shown at startup", NOTE in shown)
 c, shown = make_chain("http://127.0.0.1:8899", LOCAL_GENESIS)
@@ -209,7 +218,10 @@ ok("new-key won't overwrite", "already exists" in refused(m.cmd_new_key, types.S
 os.remove(key)
 
 # ---- apply_network: refuse bad types; warn (do not stop) on a genesis mismatch ----
-base = {k: S[k] for k in ("program_id", "config", "mint", "rpc", "private_genesis", "devnet_rpc") if k in S}
+base = {k: S[k] for k in ("program_id", "config", "mint", "devnet_rpc") if k in S}
+base["rpc"] = PRIVATE_RPC
+base["private_genesis"] = PRIVATE_GENESIS
+base["devnet_rpc"] = base.get("devnet_rpc") or "https://api.devnet.solana.com"
 
 
 def net_settings(**kw):
@@ -243,7 +255,7 @@ def check_shown(genesis, url, settings):
 
 
 priv = m.apply_network(net_settings(network="private"))
-label, shown = check_shown(S["private_genesis"], S["rpc"], priv)
+label, shown = check_shown(PRIVATE_GENESIS, PRIVATE_RPC, priv)
 ok("private + matching genesis: no warning", label == "private Sumo test network" and "Warning" not in shown)
 label, shown = check_shown(m.DEVNET_GENESIS, "https://api.devnet.solana.com", priv)
 ok("private label on a devnet chain: warns, still runs",
@@ -253,8 +265,8 @@ s = dict(base, network="devnet", devnet_rpc="https://example-for-test.invalid")
 s = m.apply_network(s)
 # Use the shipped private http link with the private genesis so check_devnet accepts it,
 # after apply_network has labelled the settings as devnet.
-s["_shipped_rpc"] = S["rpc"]
-label, shown = check_shown(S["private_genesis"], S["rpc"], s)
+s["_shipped_rpc"] = PRIVATE_RPC
+label, shown = check_shown(PRIVATE_GENESIS, PRIVATE_RPC, s)
 ok("devnet label on the private chain: warns, still runs",
    label == "private Sumo test network" and "Warning" in shown and "private" in shown)
 label, shown = check_shown(LOCAL_GENESIS, "http://127.0.0.1:8899", priv)

@@ -4,7 +4,7 @@
   docs/whitepaper.md   -> docs/whitepaper.html
   docs/mining-guide.md -> docs/mining-guide.html
   (template below)     -> docs/index.html    (home page)
-  (template below)     -> stats/index.html   (the stats page served by the Sumo gateway)
+  (template below)     -> stats/index.html   (the stats page; default RPC is public devnet)
   mockups_8bit/v4      -> home header + metadata frog in docs/, stats/ and assets/
   art/pixy             -> per-page headers, $SUMO token logo and favicons
 
@@ -167,14 +167,14 @@ STATS_SCRIPT = """
 <script src="stats.js"></script>
 <script>
 const qs = new URLSearchParams(location.search);
-// One setting: SUMO.network is "private" (default) or "devnet".
-// Served by the private gateway itself (port 8080): talk to this same origin.
-// Public https website, or opened as a file: use the config RPC (not this page's origin).
+// One setting: SUMO.network is "devnet" (default) or "private" (retired private test gateway).
+// Public site and local files: use the public devnet RPC from the config.
+// The old private gateway on port 8080 is retired; if this page is ever opened there, use that origin.
 function defaultRpc() {
-  const net = String(SUMO.network || "private").toLowerCase();
+  const net = String(SUMO.network || "devnet").toLowerCase();
   if (net === "devnet" || net === "public-devnet") return SUMO.devnet_rpc;
   if (location.protocol === "http:" && location.port === "8080") return location.origin;
-  return SUMO.rpc;
+  return SUMO.rpc || SUMO.devnet_rpc;
 }
 const RPC = qs.get("rpc") || defaultRpc();
 const isDevnet = RPC.includes("devnet.solana.com");
@@ -221,8 +221,8 @@ refresh(); setInterval(refresh, 20000);
 HOME_BODY = """<img class="logo" src="sumo_logo.png" alt="The $SUMO token: a dark navy coin with a teal-to-purple rim and a cream sumo belt knot." width="128" height="128">
 <h1>SUMO FROG ($SUMO)</h1>
 <h3>The frog you mine. A fair-launch proof-of-work coin on Solana.</h3>
-<blockquote><p><strong>NOT LAUNCHED</strong> $SUMO currently lives only on a <strong>private test network</strong>
-(and Solana's public test networks for experiments). Test SUMO is <strong>worthless</strong>, cannot be bought or
+<blockquote><p><strong>TESTNET ONLY</strong> $SUMO currently lives on <strong>Solana's public devnet</strong>.
+Test SUMO is <strong>worthless</strong>, cannot be bought or
 sold, and will never carry over to any later network. This site is a preview.</p></blockquote>
 <p>Sumo Frog is a hobby project: a token anyone can earn by doing a little work with their own computer, under rules
 written down in advance. The idea is borrowed openly from Bitcoin. The mascot is an 8-bit sumo frog.</p>
@@ -248,7 +248,7 @@ double-click <strong>Mine SUMO</strong>. Full steps, screenshots and safety note
 <ul>
 <li><a href="whitepaper.html">Whitepaper</a> — the full rules</li>
 <li><a href="mining-guide.html">Mining guide</a> — how to run the test miner</li>
-<li><a href="../stats/index.html">Stats</a> — live blocks, reward and top miners (needs the test gateway)</li>
+<li><a href="../stats/index.html">Stats</a> — live blocks, reward and top miners (reads public devnet)</li>
 <li><a href="https://github.com/LeBongo420/sumofrog">Code on GitHub</a> — private for now; link is a placeholder until the repo is published</li>
 </ul>
 <p>There are <strong>no official social media accounts</strong>. The author's personal X handle is
@@ -306,18 +306,19 @@ def images():
     save_jpeg(os.path.join(pixy, "header_guide.jpg"), os.path.join(ROOT, "docs", "header_guide.jpg"))
     save_jpeg(os.path.join(pixy, "header_whitepaper.jpg"), os.path.join(ROOT, "docs", "header_whitepaper.jpg"))
     save_jpeg(os.path.join(pixy, "header_stats.jpg"), os.path.join(ROOT, "stats", "header_stats.jpg"))
-    # token metadata image (the gateway serves it as /sumo_frog.png): 512px pixel frog on navy
+    # token metadata image (GitHub Pages serves docs/sumo_frog.png): 512px pixel frog on navy
     meta = Image.new("RGBA", (512, 512), (14, 16, 48, 255))
     meta.alpha_composite(frog)
     meta.convert("RGB").save(os.path.join(ROOT, "stats", "sumo_frog.png"), optimize=True)
     shutil.copy(os.path.join(ROOT, "stats", "sumo_frog.png"), os.path.join(ROOT, "assets", "sumo_frog.png"))
+    shutil.copy(os.path.join(ROOT, "stats", "sumo_frog.png"), os.path.join(ROOT, "docs", "sumo_frog.png"))
     print("wrote header, logo and metadata images")
 
 
 
 # ---- public-site publish guard ----
 # Never copy the real stats/sumo_config.js (it may hold the private server address).
-# Publish only the example (YOUR_SERVER placeholder) or a devnet-only setting.
+# Publish only a public-devnet stats config (never the gitignored live file).
 # Only tracked files are copied (never gitignored working-tree copies).
 EXAMPLE_STATS = os.path.join(ROOT, "stats", "sumo_config.example.js")
 LIVE_STATS = os.path.join(ROOT, "stats", "sumo_config.js")
@@ -328,9 +329,10 @@ DEVNET_HOST = "api.devnet.solana.com"
 # Web files copied into a publish folder. Source markdown, fonts and screens stay out.
 DOCS_PUBLISH = (
     "index.html", "mining-guide.html", "whitepaper.html",
-    "sumo_header.png", "sumo_logo.png", "sumo_frog_icon.png",
+    "sumo_header.png", "sumo_logo.png", "sumo_frog_icon.png", "sumo_frog.png",
     "favicon-16.png", "favicon-32.png", "apple-touch-icon.png",
     "header_guide.jpg", "header_whitepaper.jpg",
+    "metadata.json",
 )
 STATS_PUBLISH = (
     "index.html", "stats.js", "sumo_header.png", "sumo_logo.png", "sumo_frog_icon.png",
@@ -437,39 +439,33 @@ def require_tracked(relpath):
 
 
 def stats_config_is_publishable(text):
-    """True only for the YOUR_SERVER example or a config that talks to public devnet alone."""
+    """True only for a config that talks to public devnet alone (no raw IPv4, no :8080)."""
     if IPV4.search(text):
+        return False
+    if ":8080" in text or "YOUR_SERVER" in text:
         return False
     urls = [u.rstrip('",;') for u in re.findall(r'https?://\S+', text)]
     if not urls:
         return False
-
-    def ok_url(u):
-        return "YOUR_SERVER" in u or DEVNET_HOST in u
-
-    if not all(ok_url(u) for u in urls):
-        return False
-    if "YOUR_SERVER" in text:
-        return True
     return all(DEVNET_HOST in u for u in urls)
 
 
-def publishable_stats_config(kind="example"):
+def publishable_stats_config(kind="devnet"):
     """Build a stats config from the example file only — never from stats/sumo_config.js."""
     text = open(require_tracked(os.path.join("stats", "sumo_config.example.js")), encoding="utf-8").read()
-    if kind == "example":
-        out = text
-    elif kind == "devnet":
-        out = text.replace('"network": "private"', '"network": "devnet"', 1)
-        out = out.replace('"rpc": "http://YOUR_SERVER:8080"', f'"rpc": "https://{DEVNET_HOST}"', 1)
-    else:
+    if kind not in ("example", "devnet"):
         raise SystemExit('stats network must be "example" or "devnet"')
+    # The tracked example is public devnet. "example" and "devnet" both publish that file.
+    # If an older private example is still in the tree, rewrite it to devnet.
+    out = text
+    out = out.replace('"network": "private"', '"network": "devnet"', 1)
+    out = out.replace('"rpc": "http://YOUR_SERVER:8080"', f'"rpc": "https://{DEVNET_HOST}"', 1)
     if not stats_config_is_publishable(out):
-        raise SystemExit("refusing to publish a stats config that is not the example or a devnet setting")
+        raise SystemExit("refusing to publish a stats config that is not a public-devnet setting")
     return out
 
 
-def write_publishable_stats_config(dest_dir, kind="example"):
+def write_publishable_stats_config(dest_dir, kind="devnet"):
     refuse_live_publish_dest(dest_dir, "published config")
     dest_dir = os.path.abspath(dest_dir)
     dest = os.path.join(dest_dir, "sumo_config.js")
@@ -486,7 +482,7 @@ def write_publishable_stats_config(dest_dir, kind="example"):
     return dest
 
 
-def stage_public_site(dest, kind="example"):
+def stage_public_site(dest, kind="devnet"):
     """Copy the website into dest, with only a publishable stats config (never the real one).
 
     Only tracked files are copied from docs/ and stats/. The live (gitignored)
@@ -538,8 +534,8 @@ def stage_public_site(dest, kind="example"):
 def main(argv=None):
     ap = argparse.ArgumentParser(description="Build the Sumo Frog website, or stage a public copy")
     ap.add_argument("--publish-dir", help="copy the built site here with only the example or devnet stats config")
-    ap.add_argument("--stats-network", choices=("example", "devnet"), default="example",
-                    help="which stats config to put in --publish-dir (default: example with YOUR_SERVER)")
+    ap.add_argument("--stats-network", choices=("example", "devnet"), default="devnet",
+                    help="which stats config to put in --publish-dir (default: public devnet)")
     args = ap.parse_args(argv)
     if args.publish_dir:
         return stage_public_site(args.publish_dir, args.stats_network)

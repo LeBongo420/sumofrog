@@ -119,8 +119,12 @@ def main():
     b.stage_public_site(dest, "example")
     published = open(os.path.join(dest, "stats", "sumo_config.js"), encoding="utf-8").read()
     ok("staged example config is publishable", b.stats_config_is_publishable(published))
-    ok("staged example uses YOUR_SERVER", "YOUR_SERVER" in published)
+    ok("staged example uses public devnet", "api.devnet.solana.com" in published
+       and "YOUR_SERVER" not in published and ":8080" not in published)
     ok("staged example has no raw IPv4", b.IPV4.search(published) is None)
+    ok("staged site includes public metadata and the token picture",
+       os.path.isfile(os.path.join(dest, "metadata.json"))
+       and os.path.isfile(os.path.join(dest, "sumo_frog.png")))
     ok("home page was staged", os.path.isfile(os.path.join(dest, "index.html")))
     ok("stats page was staged under dest/stats", os.path.isfile(os.path.join(dest, "stats", "index.html")))
     # dest/stats is not the live tree
@@ -221,7 +225,11 @@ def main():
 
     # Miner zip is packed from git (HEAD), not the working tree.
     data = z.git_show("miner/sumo_config.example.json")
-    ok("zip git_show reads the example config", b"YOUR_SERVER" in data)
+    ok("zip git_show reads the tracked example config", b"program_id" in data)
+    example_cfg = open(os.path.join(b.ROOT, "miner", "sumo_config.example.json"), encoding="utf-8").read()
+    ok("working-tree example config is public devnet",
+       '"network": "devnet"' in example_cfg and "YOUR_SERVER" not in example_cfg
+       and ":8080" not in example_cfg and "api.devnet.solana.com" in example_cfg)
     try:
         z.git_show("miner/sumo_config.json")
         packed_real = True
@@ -515,6 +523,19 @@ def main():
         ok(f"{guide}: never tells people to copy the wallet file",
            "copy sumo-devnet-key" not in flat.lower() and "copy it" not in flat.lower())
         ok(f"{guide}: explains the 'Two wallets found' stop", "Two wallets found" in flat)
+    # Public-safe metadata (Ribbit review 21 Nov): tracked docs/ file + example, no gateway.
+    for rel in ("docs/metadata.json", "assets/metadata.example.json"):
+        meta = open(os.path.join(b.ROOT, rel), encoding="utf-8").read()
+        ok(f"{rel}: public name and symbol", '"name": "Sumo Frog"' in meta and '"symbol": "SUMO"' in meta)
+        ok(f"{rel}: https Pages image, no private gateway",
+           "https://lebongo420.github.io/sumofrog/sumo_frog.png" in meta
+           and ":8080" not in meta and "YOUR_SERVER" not in meta and "http://" not in meta
+           and "private test network" not in meta.lower())
+        ok(f"{rel}: devnet / test-only wording",
+           "devnet" in meta.lower() and "worthless" in meta.lower())
+    ok("docs/sumo_frog.png is present for Pages",
+       os.path.isfile(os.path.join(b.ROOT, "docs", "sumo_frog.png")))
+
     print(f"site publish checks: {passed} passed")
 
 

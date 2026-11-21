@@ -1,12 +1,12 @@
 {
   "name": "Sumo Frog",
   "symbol": "SUMO",
-  "description": "A toy proof-of-work token on a private Solana test network (and later devnet). Worthless, for learning only. Mascot: an 8-bit sumo frog.",
-  "image": "http://YOUR_SERVER:8080/sumo_frog.png",
+  "description": "A toy proof-of-work token on Solana devnet. Test only and worthless — not for sale. Mascot: an 8-bit sumo frog.",
+  "image": "https://lebongo420.github.io/sumofrog/sumo_frog.png",
   "attributes": [
     {
       "trait_type": "network",
-      "value": "private test network"
+      "value": "solana devnet"
     }
   ]
 }

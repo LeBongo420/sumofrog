@@ -4,8 +4,8 @@
 
 **Draft, 1 November 2026; revised 12 November 2026.** Author: [lebongo420](https://x.com/lebongo420)
 
-> **Test-network notice.** $SUMO currently lives only on a private test network and on Solana's
-> public test networks. Test SUMO is a **worthless test token**. It cannot be bought or sold, and
+> **Test-network notice.** $SUMO currently lives on **Solana's public devnet**.
+> Test SUMO is a **worthless test token**. It cannot be bought or sold, and
 > it will never carry over to any later network.
 
 ---
@@ -125,8 +125,8 @@ is still being decided.
 ## 8. Paying for the network
 
 Each solved block is an ordinary Solana transaction. On the launch network, miners pay their own
-small transaction fees in SOL. There is no faucet there. On test networks, a small faucet hands
-out free test SOL.
+small transaction fees in SOL. There is no faucet there. On Solana devnet, get free test SOL from
+https://faucet.solana.com.
 
 ## 9. Risks and limits
 

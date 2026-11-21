@@ -61,7 +61,7 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 <h1>HOW TO MINE SUMO FROG ($SUMO)</h1>
 <p><em>A short guide for friends trying the test miner on Windows.</em></p>
 <blockquote>
-<p><strong>This is a TEST chain.</strong> Test SUMO has no value, can't be bought or sold, and may be reset before any real launch. This is not an investment. It's a hobby project for trying out mining.</p>
+<p><strong>This is a TEST chain on Solana's public devnet.</strong> Test SUMO has no value, can't be bought or sold, and may be reset. This is not an investment. It's a hobby project for trying out mining.</p>
 </blockquote>
 <h2>What you need</h2>
 <ul>
@@ -77,16 +77,18 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 <p>Not sure if you have it? Skip this step. If Python is missing, the miner says "Python isn't installed yet" and you can come back here.</p>
 <h2>2. Download and unzip the miner</h2>
 <ol>
-<li>Download the miner: <strong><a href="downloads/sumo-miner-v0.6.zip">sumo-miner-v0.6.zip</a></strong>. Check the file: SHA-256 <code>cb8cf807efa5ad91f09ee664ea57c6d805829eabb51de7938753ae98e11df536</code>.</li>
+<li>Download the miner: <strong><a href="downloads/sumo-miner-v0.6.3-devnet.zip">sumo-miner-v0.6.3-devnet.zip</a></strong>. Check the file: SHA-256 <code>996a49995fcab528dbdc9a961dce5d956a51987d899bd0ddd6ab475b91d66107</code>.</li>
 <li>Right-click the zip and choose <strong>Extract All…</strong>, then click <strong>Extract</strong>.</li>
-<li>Open the new folder. Copy <code>sumo_config.example.json</code> to <code>sumo_config.json</code>, then open that file and replace <code>YOUR_SERVER</code> with the test gateway address you were given. The miner cannot connect until you do this. Leave <code>"network"</code> set to <code>"private"</code> unless you were told to switch it to <code>"devnet"</code>. You'll also see <code>START HERE.txt</code>, <code>Mine SUMO.bat</code>, <code>Check balance.bat</code>, <code>Get test SOL.bat</code>, <code>Set payout address.bat</code> and <code>Withdraw SOL.bat</code>.</li>
+<li>Open the new folder. You'll see <strong>SUMO Frog.bat</strong> and <strong>START HERE.txt</strong> on top, and a <strong>files</strong> folder with everything else. There is nothing to edit: this zip is already set to public Solana devnet.</li>
 </ol>
-<h2>3. Double-click "Mine SUMO"</h2>
+<p>Updating from an older miner? Extract into the <strong>same</strong> folder and choose <strong>Replace the files</strong>. Your wallet file <code>sumo-devnet-key.json</code> is not in the zip, so it stays as it is. The first time you run SUMO Frog.bat it moves that wallet into the new <strong>files</strong> folder. <strong>Never delete</strong> <code>sumo-devnet-key.json</code>, wherever it is: it holds your test SUMO. If the miner says "Two wallets found", it has stopped on purpose: read what it says and don't delete anything. Delete the five old buttons next to SUMO Frog.bat if they're still there (<strong>Mine SUMO.bat</strong>, <strong>Check balance.bat</strong>, <strong>Get test SOL.bat</strong>, <strong>Set payout address.bat</strong> and <strong>Withdraw SOL.bat</strong>) and the old <strong>HOW TO MINE.txt</strong> next to SUMO Frog.bat. The old Mine SUMO.bat can make a second wallet. Delete only those files, never the wallet.</p>
+<h2>3. Double-click "SUMO Frog"</h2>
 <ol>
-<li>Double-click <strong>Mine SUMO.bat</strong>.</li>
+<li>Double-click <strong>SUMO Frog.bat</strong>. A menu appears: <strong>1 Mine SUMO</strong>, <strong>2 Check balance</strong>, <strong>3 Get test SOL</strong>, <strong>4 Set payout address</strong>, <strong>5 Withdraw SOL</strong>, <strong>6 Exit</strong>.</li>
 <li>If Windows says <strong>"Windows protected your PC"</strong>, click <strong>More info</strong>, then <strong>Run anyway</strong>. It's a plain text script; you can right-click it and choose <strong>Edit</strong> to see exactly what it does.</li>
-<li>The first time, it sets itself up for about a minute, makes your test wallet and gets you some free test SOL to pay the tiny network fees.</li>
-<li>Then mining starts. Leave the window open.</li>
+<li>Press <strong>1</strong>. The first time, it sets itself up for about a minute, makes your test wallet and shows its address, then says it needs test SOL. That's normal.</li>
+<li>Get free test SOL: open <strong><a href="https://faucet.solana.com">https://faucet.solana.com</a></strong>, sign in with GitHub, pick <strong>Devnet</strong>, paste the wallet address from step 3 (or press <strong>2</strong> in the menu, Check balance, to see it again), and request the most it allows. Menu option 3 (Get test SOL) usually fails on public devnet; use the website instead.</li>
+<li>Double-click <strong>SUMO Frog.bat</strong> again and press <strong>1</strong>. Mining starts. Leave the window open.</li>
 </ol>
 <p><img alt="The miner while it's working: the box on the right says &quot;&gt;&gt; MINING...&quot;" src="screens/miner_mining.png" /></p>
 <p>While it works, the box on the right says <strong>&gt;&gt; MINING...</strong>. When you win a block, it turns into <strong>*** BLOCK FOUND! +20 SUMO ***</strong> and the frog throws its arms up.</p>
@@ -139,30 +141,30 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 <h2>4. Send rewards to your own wallet (optional)</h2>
 <p>By default, rewards stay in the miner's own test wallet. To send them to a wallet you already use:</p>
 <ol>
-<li>Double-click <strong>Set payout address.bat</strong>.</li>
+<li>In the menu, press <strong>4</strong> (Set payout address).</li>
 <li>Paste your wallet's <strong>public address</strong> (the one you'd share to receive coins) and press Enter.</li>
 <li>Check the address it shows you, then type <strong>YES</strong>.</li>
 </ol>
-<p>From then on, each reward goes straight to that address. The miner's own test wallet still pays the tiny test fees, so keep a little test SOL in it. To go back, run <strong>Set payout address.bat</strong> again and type <strong>none</strong>.</p>
+<p>From then on, each reward goes to that wallet. The miner's own test wallet still pays the tiny network fees.</p>
 <p>Advanced: you can also start the miner with <code>sumo_miner.py mine --payout YOUR_PUBLIC_ADDRESS</code>.</p>
 <p><strong>Only ever paste a public address.</strong> Never type a seed phrase or private key into the miner or anywhere else. The miner refuses them, and nothing here will ever ask for one.</p>
 <h2>5. Check your balance</h2>
-<p>Double-click <strong>Check balance.bat</strong> at any time. It shows your test SUMO (and your payout address's SUMO, if you set one), your test SOL and the network stats (blocks mined, difficulty, reward, supply).</p>
+<p>In the menu, press <strong>2</strong> (Check balance) at any time. It shows your test SUMO (and your payout address's SUMO, if you set one), your test SOL and the network stats (blocks mined, difficulty, reward, supply).</p>
 <h2>6. Stop mining</h2>
-<p><strong>Close the miner window</strong>, or press <strong>Ctrl+C</strong> in it. You can start again any time with <strong>Mine SUMO.bat</strong>; your coins stay in your wallet.</p>
+<p>Press <strong>Ctrl+C</strong>. The miner asks "Stop mining?": press <strong>Y</strong> to stop and go back to the menu, or <strong>N</strong> to keep mining. Closing the window also stops it. If Windows asks "Terminate batch job (Y/N)?" instead (this can happen between blocks, or before the miner is hashing), mining has already stopped: <strong>N</strong> goes back to the menu, <strong>Y</strong> closes. After anything except mining, the menu comes back. Your coins stay in your wallet.</p>
 <h2>7. Take your test SOL back out (optional)</h2>
 <p>When you've finished mining on a PC, you can send the miner's leftover test SOL to your own wallet:</p>
 <ol>
-<li>Double-click <strong>Withdraw SOL.bat</strong>.</li>
+<li>In the menu, press <strong>5</strong> (Withdraw SOL).</li>
 <li>Paste your wallet's <strong>public address</strong>, or just press Enter to use your payout address (it shows it and asks you to confirm).</li>
 <li>It shows how much test SOL it will send, where to, and the fee. Type <strong>y</strong> to send, or press Enter to cancel.</li>
 </ol>
-<p>It sends everything minus the tiny fee, so the miner's wallet ends at 0 and closes cleanly. If the miner's wallet also holds SUMO (because you mined without a payout address), it asks whether to send that too. It refuses seed phrases, private keys, program addresses and the miner's own address. To mine again afterwards, get test SOL first with <strong>Get test SOL.bat</strong>.</p>
+<p>It sends everything minus the tiny fee, so the miner's wallet ends at 0 and closes cleanly. If the miner's wallet also holds SUMO (because you mined without a payout address), it asks whether to send that too. It refuses seed phrases, private keys, program addresses and the miner's own address. To mine again afterwards, get test SOL first from <strong>https://faucet.solana.com</strong>.</p>
 <p><img alt="Withdraw: the amount, the address and the fee are shown before anything is sent" src="screens/miner_withdraw.png" /></p>
 <p>Advanced: <code>sumo_miner.py withdraw YOUR_PUBLIC_ADDRESS --sumo --yes</code> sends SOL and SUMO without asking.</p>
 <h2>Your wallet file: keep it private</h2>
 <ul>
-<li>The miner makes its own wallet file called <strong><code>sumo-devnet-key.json</code></strong> in the miner folder. It's made for you the first time you run Mine SUMO.</li>
+<li>The miner makes its own wallet file called <strong><code>sumo-devnet-key.json</code></strong> in the <strong>files</strong> folder. It's made for you the first time you run SUMO Frog.</li>
 <li><strong>You never type a seed phrase or private key.</strong> Nothing in this guide or the miner will ever ask for one. If anything does, it isn't us, so don't do it.</li>
 <li><strong>Don't share that file or send it to anyone.</strong> Whoever has it controls the test coins in it.</li>
 <li><strong>Don't delete it.</strong> It holds your test SUMO. If you download a newer miner later, unzip it over the same folder and the wallet file stays put.</li>
@@ -170,11 +172,11 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 </ul>
 <h2>If something goes wrong</h2>
 <ul>
-<li><strong>"needs a little test SOL for fees"</strong>: double-click <strong>Get test SOL.bat</strong>, wait for it to finish, then start <strong>Mine SUMO.bat</strong> again. The faucet gives one request every 10 minutes.</li>
-<li><strong>"Python isn't installed yet"</strong>: do step 1, then double-click <strong>Mine SUMO.bat</strong> again.</li>
+<li><strong>"needs a little test SOL for fees"</strong>: get free devnet SOL at <strong>https://faucet.solana.com</strong> (sign in with GitHub, pick Devnet, paste your miner wallet address), then start mining again. Menu option 3 usually fails on public devnet.</li>
+<li><strong>"Python isn't installed yet"</strong>: do step 1, then double-click <strong>SUMO Frog.bat</strong> again.</li>
 <li><strong>"Install failed"</strong>: check your internet connection and try again.</li>
 <li><strong>"Another miner got there first"</strong>: that's normal. Someone else won that block, and the miner moves on to the next one by itself.</li>
-<li><strong>Strange symbols instead of colours</strong>: your console is very old. Run the miner in plain mode: <code>.venv\Scripts\python.exe sumo_miner.py mine --plain</code>.</li>
+<li><strong>Strange symbols instead of colours</strong>: your console is very old. Run the miner in plain mode: open a Command Prompt in the <strong>files</strong> folder and run <code>.venv\Scripts\python.exe sumo_miner.py mine --plain</code>.</li>
 </ul>
 <h2>How it works, in one paragraph</h2>
 <p>Your computer makes millions of guesses (guess #1, guess #2, ...), looking for a hash that beats the current difficulty. The first miner to find one wins the block and gets the block reward of test SUMO: 20 SUMO now, halving once a year, and never more than 21 million in total. There's no premine and no team share: every SUMO comes from mining. The difficulty adjusts so blocks keep coming at a steady pace however many people are mining.</p>

@@ -83,14 +83,14 @@ td:first-child { font-family:var(--pixel); font-size:12px; }
 <script src="stats.js"></script>
 <script>
 const qs = new URLSearchParams(location.search);
-// One setting: SUMO.network is "private" (default) or "devnet".
-// Served by the private gateway itself (port 8080): talk to this same origin.
-// Public https website, or opened as a file: use the config RPC (not this page's origin).
+// One setting: SUMO.network is "devnet" (default) or "private" (retired private test gateway).
+// Public site and local files: use the public devnet RPC from the config.
+// The old private gateway on port 8080 is retired; if this page is ever opened there, use that origin.
 function defaultRpc() {
-  const net = String(SUMO.network || "private").toLowerCase();
+  const net = String(SUMO.network || "devnet").toLowerCase();
   if (net === "devnet" || net === "public-devnet") return SUMO.devnet_rpc;
   if (location.protocol === "http:" && location.port === "8080") return location.origin;
-  return SUMO.rpc;
+  return SUMO.rpc || SUMO.devnet_rpc;
 }
 const RPC = qs.get("rpc") || defaultRpc();
 const isDevnet = RPC.includes("devnet.solana.com");

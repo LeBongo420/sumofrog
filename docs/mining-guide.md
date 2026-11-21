@@ -2,7 +2,7 @@
 
 *A short guide for friends trying the test miner on Windows.*
 
-> **This is a TEST chain.** Test SUMO has no value, can't be bought or sold, and may be reset before any real launch. This is not an investment. It's a hobby project for trying out mining.
+> **This is a TEST chain on Solana's public devnet.** Test SUMO has no value, can't be bought or sold, and may be reset. This is not an investment. It's a hobby project for trying out mining.
 
 ## What you need
 
@@ -19,16 +19,19 @@ Not sure if you have it? Skip this step. If Python is missing, the miner says "P
 
 ## 2. Download and unzip the miner
 
-1. Download the miner: **[sumo-miner-v0.6.zip](downloads/sumo-miner-v0.6.zip)**. Check the file: SHA-256 `cb8cf807efa5ad91f09ee664ea57c6d805829eabb51de7938753ae98e11df536`.
+1. Download the miner: **[sumo-miner-v0.6.3-devnet.zip](downloads/sumo-miner-v0.6.3-devnet.zip)**. Check the file: SHA-256 `996a49995fcab528dbdc9a961dce5d956a51987d899bd0ddd6ab475b91d66107`.
 2. Right-click the zip and choose **Extract All…**, then click **Extract**.
-3. Open the new folder. Copy `sumo_config.example.json` to `sumo_config.json`, then open that file and replace `YOUR_SERVER` with the test gateway address you were given. The miner cannot connect until you do this. Leave `"network"` set to `"private"` unless you were told to switch it to `"devnet"`. You'll also see `START HERE.txt`, `Mine SUMO.bat`, `Check balance.bat`, `Get test SOL.bat`, `Set payout address.bat` and `Withdraw SOL.bat`.
+3. Open the new folder. You'll see **SUMO Frog.bat** and **START HERE.txt** on top, and a **files** folder with everything else. There is nothing to edit: this zip is already set to public Solana devnet.
 
-## 3. Double-click "Mine SUMO"
+   Updating from an older miner? Extract into the **same** folder and choose **Replace the files**. Your wallet file `sumo-devnet-key.json` is not in the zip, so it stays as it is. The first time you run SUMO Frog.bat it moves that wallet into the new **files** folder. **Never delete** `sumo-devnet-key.json`, wherever it is: it holds your test SUMO. If the miner says "Two wallets found", it has stopped on purpose: read what it says and don't delete anything. Delete the five old buttons next to SUMO Frog.bat if they're still there (**Mine SUMO.bat**, **Check balance.bat**, **Get test SOL.bat**, **Set payout address.bat** and **Withdraw SOL.bat**) and the old **HOW TO MINE.txt** next to SUMO Frog.bat. The old Mine SUMO.bat can make a second wallet. Delete only those files, never the wallet.
 
-1. Double-click **Mine SUMO.bat**.
+## 3. Double-click "SUMO Frog"
+
+1. Double-click **SUMO Frog.bat**. A menu appears: **1 Mine SUMO**, **2 Check balance**, **3 Get test SOL**, **4 Set payout address**, **5 Withdraw SOL**, **6 Exit**.
 2. If Windows says **"Windows protected your PC"**, click **More info**, then **Run anyway**. It's a plain text script; you can right-click it and choose **Edit** to see exactly what it does.
-3. The first time, it sets itself up for about a minute, makes your test wallet and gets you some free test SOL to pay the tiny network fees.
-4. Then mining starts. Leave the window open.
+3. Press **1**. The first time, it sets itself up for about a minute, makes your test wallet and shows its address, then says it needs test SOL. That's normal.
+4. Get free test SOL: open **[https://faucet.solana.com](https://faucet.solana.com)**, sign in with GitHub, pick **Devnet**, paste the wallet address from step 3 (or press **2** in the menu, Check balance, to see it again), and request the most it allows. Menu option 3 (Get test SOL) usually fails on public devnet; use the website instead.
+5. Double-click **SUMO Frog.bat** again and press **1**. Mining starts. Leave the window open.
 
 ![The miner while it's working: the box on the right says ">> MINING..."](screens/miner_mining.png)
 
@@ -57,11 +60,11 @@ If the window is narrow, the miner hides the frog picture and just shows the num
 
 By default, rewards stay in the miner's own test wallet. To send them to a wallet you already use:
 
-1. Double-click **Set payout address.bat**.
+1. In the menu, press **4** (Set payout address).
 2. Paste your wallet's **public address** (the one you'd share to receive coins) and press Enter.
 3. Check the address it shows you, then type **YES**.
 
-From then on, each reward goes straight to that address. The miner's own test wallet still pays the tiny test fees, so keep a little test SOL in it. To go back, run **Set payout address.bat** again and type **none**.
+From then on, each reward goes to that wallet. The miner's own test wallet still pays the tiny network fees.
 
 Advanced: you can also start the miner with `sumo_miner.py mine --payout YOUR_PUBLIC_ADDRESS`.
 
@@ -69,21 +72,21 @@ Advanced: you can also start the miner with `sumo_miner.py mine --payout YOUR_PU
 
 ## 5. Check your balance
 
-Double-click **Check balance.bat** at any time. It shows your test SUMO (and your payout address's SUMO, if you set one), your test SOL and the network stats (blocks mined, difficulty, reward, supply).
+In the menu, press **2** (Check balance) at any time. It shows your test SUMO (and your payout address's SUMO, if you set one), your test SOL and the network stats (blocks mined, difficulty, reward, supply).
 
 ## 6. Stop mining
 
-**Close the miner window**, or press **Ctrl+C** in it. You can start again any time with **Mine SUMO.bat**; your coins stay in your wallet.
+Press **Ctrl+C**. The miner asks "Stop mining?": press **Y** to stop and go back to the menu, or **N** to keep mining. Closing the window also stops it. If Windows asks "Terminate batch job (Y/N)?" instead (this can happen between blocks, or before the miner is hashing), mining has already stopped: **N** goes back to the menu, **Y** closes. After anything except mining, the menu comes back. Your coins stay in your wallet.
 
 ## 7. Take your test SOL back out (optional)
 
 When you've finished mining on a PC, you can send the miner's leftover test SOL to your own wallet:
 
-1. Double-click **Withdraw SOL.bat**.
+1. In the menu, press **5** (Withdraw SOL).
 2. Paste your wallet's **public address**, or just press Enter to use your payout address (it shows it and asks you to confirm).
 3. It shows how much test SOL it will send, where to, and the fee. Type **y** to send, or press Enter to cancel.
 
-It sends everything minus the tiny fee, so the miner's wallet ends at 0 and closes cleanly. If the miner's wallet also holds SUMO (because you mined without a payout address), it asks whether to send that too. It refuses seed phrases, private keys, program addresses and the miner's own address. To mine again afterwards, get test SOL first with **Get test SOL.bat**.
+It sends everything minus the tiny fee, so the miner's wallet ends at 0 and closes cleanly. If the miner's wallet also holds SUMO (because you mined without a payout address), it asks whether to send that too. It refuses seed phrases, private keys, program addresses and the miner's own address. To mine again afterwards, get test SOL first from **https://faucet.solana.com**.
 
 ![Withdraw: the amount, the address and the fee are shown before anything is sent](screens/miner_withdraw.png)
 
@@ -91,7 +94,7 @@ Advanced: `sumo_miner.py withdraw YOUR_PUBLIC_ADDRESS --sumo --yes` sends SOL an
 
 ## Your wallet file: keep it private
 
-- The miner makes its own wallet file called **`sumo-devnet-key.json`** in the miner folder. It's made for you the first time you run Mine SUMO.
+- The miner makes its own wallet file called **`sumo-devnet-key.json`** in the **files** folder. It's made for you the first time you run SUMO Frog.
 - **You never type a seed phrase or private key.** Nothing in this guide or the miner will ever ask for one. If anything does, it isn't us, so don't do it.
 - **Don't share that file or send it to anyone.** Whoever has it controls the test coins in it.
 - **Don't delete it.** It holds your test SUMO. If you download a newer miner later, unzip it over the same folder and the wallet file stays put.
@@ -99,11 +102,11 @@ Advanced: `sumo_miner.py withdraw YOUR_PUBLIC_ADDRESS --sumo --yes` sends SOL an
 
 ## If something goes wrong
 
-- **"needs a little test SOL for fees"**: double-click **Get test SOL.bat**, wait for it to finish, then start **Mine SUMO.bat** again. The faucet gives one request every 10 minutes.
-- **"Python isn't installed yet"**: do step 1, then double-click **Mine SUMO.bat** again.
+- **"needs a little test SOL for fees"**: get free devnet SOL at **https://faucet.solana.com** (sign in with GitHub, pick Devnet, paste your miner wallet address), then start mining again. Menu option 3 usually fails on public devnet.
+- **"Python isn't installed yet"**: do step 1, then double-click **SUMO Frog.bat** again.
 - **"Install failed"**: check your internet connection and try again.
 - **"Another miner got there first"**: that's normal. Someone else won that block, and the miner moves on to the next one by itself.
-- **Strange symbols instead of colours**: your console is very old. Run the miner in plain mode: `.venv\Scripts\python.exe sumo_miner.py mine --plain`.
+- **Strange symbols instead of colours**: your console is very old. Run the miner in plain mode: open a Command Prompt in the **files** folder and run `.venv\Scripts\python.exe sumo_miner.py mine --plain`.
 
 ## How it works, in one paragraph
 

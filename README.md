@@ -1,9 +1,8 @@
 # Sumo Frog ($SUMO)
 
-A toy coin you can mine with your PC, living on a **private Solana test network** on Josh's
-Oracle server (public devnet later, once the devnet faucet works for us).
+A toy coin you can mine with your PC, living on **Solana's public devnet**.
 
-- **Test networks only.** The private network and devnet are free test networks. Nothing on them has value.
+- **Test networks only.** Devnet is a free test network. Nothing on it has value.
 - **$SUMO is worthless** and can't be bought, sold or swapped. It's a learning project.
 - **No real money is involved.** Never put a real wallet, seed phrase or real SOL anywhere near it.
 
@@ -12,11 +11,11 @@ Oracle server (public devnet later, once the devnet faucet works for us).
 | Program ID | `6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW` |
 | Token mint | `7VNZhAWFCKjrZVKcbU2sXxT5mNAbzYh8qmtD7HfePabR` |
 | Game state | `AjCSGvVNV2FcDxGjMQbc2QEuJMx144XpuivkDX4e4Pad` |
-| Network | private Sumo test network (genesis `9eDPpAG4RUei7HTciCEucnshXm6Rfo61d6KU8hyXwx6n`); the RPC address is in `miner/sumo_config.json` (copy from `miner/sumo_config.example.json` — same for `stats/sumo_config.example.js` and `assets/metadata.example.json`) |
-| Stats page | the gateway's front page (same address as the RPC, port 8080) |
-| Encryption | none yet: the private test link is plain `http` until launch (Josh, 2 Nov 2026). The miner says so at startup and before any withdraw |
+| Network | Solana public devnet (`https://api.devnet.solana.com`) |
+| Stats page | `stats/index.html` (reads public devnet directly) |
+| Explorer | [program](https://explorer.solana.com/address/6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW?cluster=devnet), [mint](https://explorer.solana.com/address/7VNZhAWFCKjrZVKcbU2sXxT5mNAbzYh8qmtD7HfePabR?cluster=devnet) |
 
-The public Solana Explorer can't see the private network, so there are no explorer links for now.
+The old private test gateway (port 8080) is retired and is no longer running.
 
 Mascot: an 8-bit sumo frog (v4 look: pixel art, synthwave sunset, high contrast). Page headers, the
 token logo and the miner window icon are Pixy's. The site is built by `scripts/build_site.py`.
@@ -25,17 +24,22 @@ Docs: [whitepaper](docs/whitepaper.md) · [mining guide](docs/mining-guide.md) �
 
 ## Local config
 
-This repo ships **example** configs only (no private server address):
+Example miner and stats configs are already set to public Solana devnet
+(`https://api.devnet.solana.com`). Copy them only if you want a local override.
+The real `miner/sumo_config.json` and `stats/sumo_config.js` are gitignored and must stay that way.
 
 ```bash
 cp miner/sumo_config.example.json miner/sumo_config.json
 cp stats/sumo_config.example.js stats/sumo_config.js
-cp assets/metadata.example.json assets/metadata.json
 ```
 
-Then edit `YOUR_SERVER` in those files to your own test gateway. Leave `"network"` as `"private"`
-unless you want the miner and stats page to use public Solana devnet (`"devnet"`). The real files
-are gitignored. Default is the private test chain; this does not deploy anything.
+Public token metadata (name, symbol and picture) is the tracked file `docs/metadata.json`,
+with the picture at `docs/sumo_frog.png`. Planned GitHub Pages URL (serving the `docs/` folder):
+`https://lebongo420.github.io/sumofrog/metadata.json` and
+`https://lebongo420.github.io/sumofrog/sumo_frog.png`.
+The same metadata is in `assets/metadata.example.json`. Do not use the gitignored
+`assets/metadata.json`. Creating or locking on-chain metadata (`is_mutable` off) is pending
+Josh's confirmation of the final name and picture link.
 
 
 ## The rules
@@ -66,13 +70,15 @@ miner notices and moves on to the new one.
 
 ## Mining on Windows
 
-**Easiest way (no Python knowledge needed):** unzip `docs/downloads/sumo-miner-v0.6.zip` into a folder and double-click
-`Mine SUMO.bat`. It reuses `.venv` if one is there (or makes one), installs `solders` only if it's missing,
-makes a test wallet only if `sumo-devnet-key.json` doesn't exist, gets test SOL for a new wallet, then mines.
-`Check balance.bat`, `Get test SOL.bat`, `Set payout address.bat` and `Withdraw SOL.bat` do what they say. Plain steps are in `miner/HOW TO MINE.txt`.
-Build the miner zip with: `python3 scripts/build_zips.py` (writes `docs/downloads/sumo-miner-v0.6.zip`). Testers copy `sumo_config.example.json` to `sumo_config.json` and replace `YOUR_SERVER` with the test gateway address they were given.
+**Easiest way (no Python knowledge needed):** unzip `docs/downloads/sumo-miner-v0.6.3-devnet.zip` into a folder and double-click
+`SUMO Frog.bat`. Check the file: SHA-256 `996a49995fcab528dbdc9a961dce5d956a51987d899bd0ddd6ab475b91d66107`.
+The zip is already set to public Solana devnet; there is nothing to edit. A menu appears: press **1** to mine.
+The first time, it makes a test wallet and shows its address. Get free test SOL at
+https://faucet.solana.com (sign in with GitHub, pick Devnet, paste that address), then press **1** again.
+Plain steps are in the [mining guide](docs/mining-guide.md) and in the zip's `START HERE.txt`.
+Build that zip with: `python3 scripts/build_zips.py --devnet`.
 
-The manual way:
+The manual way (from the `miner/` folder in this repo):
 
 1. **Install Python** 3.10 or newer from https://www.python.org/downloads/.
    Tick **"Add python.exe to PATH"** in the installer.
@@ -88,13 +94,10 @@ The manual way:
    ```
    This saves `sumo-devnet-key.json` and prints your address. Keep the file to yourself.
    It's only for test networks, so never send real SOL to it.
-5. **Get free test SOL for fees:**
-   ```
-   py sumo_miner.py faucet
-   ```
-   That gives you 1 test SOL (worthless), which is enough for thousands of blocks. Each block
-   costs about 0.000005 SOL in fees, plus 0.002 SOL once to open your SUMO account. The faucet
-   allows one request every 10 minutes and 5 a day.
+5. **Get free test SOL for fees:** open https://faucet.solana.com, sign in with GitHub,
+   pick Devnet, paste your miner wallet address, and request the most it allows.
+   `py sumo_miner.py faucet` usually fails on public devnet; use the website instead.
+   Each block costs about 0.000005 SOL in fees, plus 0.002 SOL once to open your SUMO account.
 6. **Mine:**
    ```
    py sumo_miner.py mine
@@ -115,13 +118,12 @@ The manual way:
      account). Same address checks as `set-payout`, plus it refuses program addresses and the
      miner's own address.
 
-The miner refuses to run on any network except the private Sumo network (its genesis hash is
-pinned in `miner/sumo_config.json` as `private_genesis`), devnet, or a local test validator.
-It always refuses mainnet. To use devnet later: `py sumo_miner.py mine --rpc https://api.devnet.solana.com`.
+The miner is set to public Solana devnet. It also still allows a local test validator, and a
+retired private test-network path that is no longer running. It always refuses mainnet.
 
 ## Stats page
 
-Open the gateway's front page (the RPC address from `miner/sumo_config.json`, in a browser), or `stats/index.html` from the zip. It shows:
+Open `stats/index.html`. It reads public Solana devnet (`https://api.devnet.solana.com`) and shows:
 
 - blocks mined
 - difficulty
@@ -184,10 +186,9 @@ somewhere else, e.g. `?rpc=https://api.devnet.solana.com`.
   [`docs/solana-prompt.md`](docs/solana-prompt.md) (Jump Crypto's Solana prompt, Apache 2.0)
   before editing the program. It is written for Pinocchio; this program uses Anchor, so skip
   the Pinocchio parts.
-- **Private network:** `server/` holds the server side: `sumo-validator.service` (Agave 4.1.1
-  `solana-test-validator`, localhost, capped CPU/memory/ledger) and `sumo-gateway.service`
-  (`sumo_gateway.py`: allowlisted JSON-RPC, rate-limited faucet, stats page on port 8080).
-  See `server/README.md`.
+- **Retired private test network:** `server/` is the old private-chain validator and gateway
+  (port 8080). That stack is no longer running and is not used for the public-devnet launch.
+  See `server/README.md` (historical).
 - **Deploy:** run `scripts/deploy-devnet.sh [metadata-uri] [demo-blocks]` (set `SUMO_RPC`).
   It needs about 2.1 devnet SOL in the deployer key, which is mostly program rent.
   You can get that back later with `solana program close`.
@@ -217,9 +218,9 @@ somewhere else, e.g. `?rpc=https://api.devnet.solana.com`.
 - **Miner safety checks (2 Nov 2026):** every payout path (`--payout`, `set-payout`,
   `payout-address.txt`, `"payout"` in `sumo_config.json`) refuses the program, config and mint
   addresses, token accounts and other program-controlled addresses. Network links must be
-  `https`, except this computer (`localhost`, `127.0.0.1`, `::1`) and the private network link
-  shipped in `sumo_config.json`, which stays `http` until launch. Whenever the miner uses that
-  link it shows, at startup and again before any withdraw: "Note: the
+  `https`, except this computer (`localhost`, `127.0.0.1`, `::1`) and a retired private test-network
+  link (plain `http`) that is no longer running. If that old path is used, the miner still shows,
+  at startup and again before any withdraw: "Note: the
   private test link isn't encrypted. Fine for test coins with no value. Always check the payout
   address you type." The colour mining screen pins a short version to its footer ("Note: test
   link isn't encrypted. Check your payout address."); `--plain` shows the full note. Someone on the same network could fake the miner's screens, so the program,

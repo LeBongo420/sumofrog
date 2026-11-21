@@ -1,9 +1,7 @@
 const SUMO = {
-  "network": "private",
+  "network": "devnet",
   "program_id": "6h1PqXArg2Ap1CJdR1hXXWhqSrzkeboqi5cx1y44NvTW",
   "config": "AjCSGvVNV2FcDxGjMQbc2QEuJMx144XpuivkDX4e4Pad",
   "mint": "7VNZhAWFCKjrZVKcbU2sXxT5mNAbzYh8qmtD7HfePabR",
-  "rpc": "http://YOUR_SERVER:8080",
-  "private_genesis": "9eDPpAG4RUei7HTciCEucnshXm6Rfo61d6KU8hyXwx6n",
   "devnet_rpc": "https://api.devnet.solana.com"
 };
