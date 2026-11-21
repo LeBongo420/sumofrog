@@ -1380,18 +1380,18 @@ def cmd_menu(args, settings):
 
 
 def cmd_pick(args, settings):
-    """Wait for a key 1-6 and exit with 10 + that number (11 to 16), for the launcher's menu. Any other
-    key is ignored without a sound (the batch file's `choice` beeps). Ctrl+C or any trouble exits 16
+    """Wait for a key 1-5 and exit with 10 + that number (11 to 15), for the launcher's menu. Any other
+    key is ignored without a sound (the batch file's `choice` beeps). Ctrl+C or any trouble exits 15
     (Exit); the launcher treats every code below 11 (a crash) as Exit too, never as Mine."""
     try:
         while True:
             key = read_key()
-            if key and key in "123456":
+            if key and key in "12345":
                 sys.exit(10 + int(key))
             if key == "\x03":
-                sys.exit(16)
+                sys.exit(15)
     except (KeyboardInterrupt, Exception):
-        sys.exit(16)
+        sys.exit(15)
 
 
 def cmd_balance(args, settings):

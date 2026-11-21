@@ -27,7 +27,7 @@ First time on this PC (or updating the old folder)
 4. This zip is already set to the public Solana devnet (files\sumo_config.json is included).
    There is nothing to edit. You need Python 3 installed (python.org, tick "Add python.exe to PATH").
 5. Open that folder and double-click  SUMO Frog.bat . A numbered menu appears:
-     1 Mine SUMO   2 Check balance   3 Get test SOL   4 Set payout address   5 Withdraw SOL   6 Exit
+     1 Mine SUMO   2 Check balance   3 Set payout address   4 Withdraw SOL   5 Exit
    Press 1. The first time, it makes a test wallet and shows its address, then says it needs test SOL.
    Get free devnet SOL at https://faucet.solana.com (sign in with GitHub, pick Devnet,
    paste that address; menu option 2, Check balance, shows it again), then press 1 again.
@@ -54,7 +54,7 @@ What the numbers mean
 - HALVING IN  blocks left until the reward halves
 
 Sending rewards to your own wallet (optional)
-- In the menu, press 4 (Set payout address) and paste your wallet's PUBLIC address
+- In the menu, press 3 (Set payout address) and paste your wallet's PUBLIC address
   (the one you'd share to receive coins). Type YES to confirm.
   If it isn't accepted it asks again. Type  back  to cancel, or  none  to remove it.
 - From then on the miner sends each reward there. The miner's own test wallet
@@ -64,7 +64,7 @@ Sending rewards to your own wallet (optional)
 - To go back to the miner's own wallet, choose it again and type  none
 
 Taking your test SOL back out (optional)
-- In the menu, press 5 (Withdraw SOL) when you've finished mining on this PC.
+- In the menu, press 4 (Withdraw SOL) when you've finished mining on this PC.
 - Paste your wallet's PUBLIC address (if you saved a payout address it asks whether to use it).
   If an address isn't accepted it asks again; type  back  to cancel.
 - It shows how much test SOL it will send and where, then asks  y/N  first.
@@ -73,11 +73,10 @@ Taking your test SOL back out (optional)
   want to send that as well.
 - It refuses seed phrases, private keys, program addresses and the miner's
   own address, and never asks for a key.
-- To mine again afterwards, get test SOL first (menu option 3, Get test SOL).
+- To mine again afterwards, get test SOL first from https://faucet.solana.com.
 
 Other menu options
 - 2 Check balance : shows your SUMO, your test SOL and the network stats.
-- 3 Get test SOL  : on public devnet this usually fails; use https://faucet.solana.com instead.
 
 If the colours or pictures look wrong
 - Make the window wider (about 100 columns) to see the frog, or run

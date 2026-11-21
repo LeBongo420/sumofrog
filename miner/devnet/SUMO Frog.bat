@@ -33,19 +33,17 @@ echo   ------------------------------------------------
 echo.
 echo     1   Mine SUMO
 echo     2   Check balance
-echo     3   Get test SOL
-echo     4   Set payout address
-echo     5   Withdraw SOL
-echo     6   Exit
+echo     3   Set payout address
+echo     4   Withdraw SOL
+echo     5   Exit
 echo.
-<nul set /p "=  Press a number from 1 to 6: "
+<nul set /p "=  Press a number from 1 to 5: "
 "%PY%" sumo_miner.py pick
 :menu_pick
-rem pick exits 10 + the key (11 to 16) and stays silent on any other key. Anything lower (a crash) is Exit, never Mine.
-if errorlevel 16 goto bye
-if errorlevel 15 goto withdraw
-if errorlevel 14 goto payout
-if errorlevel 13 goto faucet
+rem pick exits 10 + the key (11 to 15) and stays silent on any other key. Anything lower (a crash) is Exit, never Mine.
+if errorlevel 15 goto bye
+if errorlevel 14 goto withdraw
+if errorlevel 13 goto payout
 if errorlevel 12 goto balance
 if errorlevel 11 goto mine
 goto bye
@@ -83,13 +81,6 @@ cls
 "%PY%" sumo_miner.py status
 goto done
 
-:faucet
-cls
-"%PY%" sumo_miner.py faucet
-echo.
-echo  The faucet allows one request every 10 minutes. Test SOL is worthless.
-echo  On public devnet this often fails: use https://faucet.solana.com instead.
-goto done
 
 :payout
 cls

@@ -554,11 +554,11 @@ ok("menu: draws all 30 rows, each exactly 80 columns wide", sorted(rows) == list
    and all(len(r) == 80 for r in rows.values()))
 ok("menu: truecolour (24-bit) codes, no line feeds, cursor parked on the prompt row",
    "\x1b[38;2;" in ansi and ";48;2;" in ansi and "\n" not in ansi and ansi.endswith("\x1b[27;" + str(sumo_menu.prompt_cursor()[1]) + "H"))
-ok("menu: has the frog, the SUMO logo, FROG MINER, TEST COINS / TEST CHAIN, the wallet panel, MAIN MENU 1-6, the prompt and the horizon",
+ok("menu: has the frog, the SUMO logo, FROG MINER, TEST COINS / TEST CHAIN, the wallet panel, MAIN MENU 1-5, the prompt and the horizon",
    "\u2588" in rows[2] and "FROG MINER" in rows[10] and "TEST COINS / TEST CHAIN" in rows[11]
    and "WALLET" in rows[14] and "BALANCE" in rows[15] and "MAIN MENU" in rows[18]
    and all(f"[{i}] {label}" in rows[18 + i] for i, label in enumerate(sumo_menu.ITEMS, 1))
-   and "Press a number from 1 to 6" in rows[27] and "\u2580" in rows[28] and "/" in rows[29])
+   and "Press a number from 1 to 5" in rows[27] and "\u2580" in rows[28] and "/" in rows[29])
 ok("menu: the [1] row is the highlighted one (arrow + inverted bar)", "\u25ba [1] Mine SUMO" in rows[19] and "\u25ba" not in rows[20])
 ok("menu: shows the real short wallet and the real balance (1.50 SUMO)", m.short(kp.pubkey()) in rows[14] and "1.50 SUMO" in rows[15])
 old_version = m.VERSION
@@ -1020,8 +1020,8 @@ def run_pick(keys):
 
 ok("home menu: wrong keys are ignored with no output at all (no bell) and 3 gives exit code 13",
    run_pick("a\x07 x9\n703") == (13, "", ""))
-ok("home menu: keys 1 to 6 exit 11 to 16", [run_pick(str(i))[0] for i in range(1, 7)] == [11, 12, 13, 14, 15, 16])
-ok("home menu: Ctrl+C or no input at all exits 16 (Exit), silently", run_pick("\x03")[0] == 16 and run_pick("")[0] == 16
+ok("home menu: keys 1 to 5 exit 11 to 15, and 6 is ignored like any other wrong key", [run_pick(str(i))[0] for i in range(1, 6)] == [11, 12, 13, 14, 15] and run_pick("6" + "3")[0] == 13)
+ok("home menu: Ctrl+C or no input at all exits 15 (Exit), silently", run_pick("\x03")[0] == 15 and run_pick("")[0] == 15
    and run_pick("")[1:] == ("", ""))
 
 
@@ -1110,7 +1110,7 @@ ok("quiet console input is on only inside grind (and pick), not around the whole
    "with quiet_console_input():" in gsrc and "quiet_console_input" not in msrc[msrc.index("def cmd_mine"):msrc.index("def cmd_status")]
    and msrc.count("with quiet_console_input():") == 2)
 
-# ---- 19 Nov (e): pick needs no config, and any trouble in the key read exits 16 (Exit), never 11 (Mine) ----
+# ---- 19 Nov (e): pick needs no config, and any trouble in the key read exits 15 (Exit), never 11 (Mine) ----
 for label, cfg in (("no config", None), ("broken config", "{ not json")):
     with tempfile.TemporaryDirectory() as td:
         shutil.copy(os.path.join(MINER, "sumo_miner.py"), td)
@@ -1125,7 +1125,7 @@ try:
         def broken():
             raise exc
         m.read_key = broken
-        ok(f"home menu: {type(exc).__name__} inside the key read exits 16 (Exit), not 11 (Mine)", refused_code(m.cmd_pick, None, None) == 16)
+        ok(f"home menu: {type(exc).__name__} inside the key read exits 15 (Exit), not 11 (Mine)", refused_code(m.cmd_pick, None, None) == 15)
 finally:
     m.read_key = old_read
 

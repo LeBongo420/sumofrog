@@ -316,14 +316,14 @@ def main():
        and launcher.index("if errorlevel 2 goto stopsafe") < launcher.index("if errorlevel 1 goto fail") < launcher.index(":menu")
        and "%~dp0_setup" not in launcher)
     lines = [l.strip() for l in launcher.splitlines()]
-    menu_items = [l for l in lines if l.startswith("echo") and l.split()[1:2] and l.split()[1] in "123456"]
-    ok("launcher menu: 1 Mine SUMO, 2 Check balance, 3 Get test SOL, 4 Set payout address, 5 Withdraw SOL, 6 Exit",
-       [" ".join(l.split()[1:]) for l in menu_items] == ["1 Mine SUMO", "2 Check balance", "3 Get test SOL",
-                                                       "4 Set payout address", "5 Withdraw SOL", "6 Exit"])
-    order = ["if errorlevel 16 goto bye", "if errorlevel 15 goto withdraw", "if errorlevel 14 goto payout",
-             "if errorlevel 13 goto faucet", "if errorlevel 12 goto balance", "if errorlevel 11 goto mine"]
+    menu_items = [l for l in lines if l.startswith("echo") and l.split()[1:2] and l.split()[1] in "12345"]
+    ok("launcher menu: 1 Mine SUMO, 2 Check balance, 3 Set payout address, 4 Withdraw SOL, 5 Exit",
+       [" ".join(l.split()[1:]) for l in menu_items] == ["1 Mine SUMO", "2 Check balance", "3 Set payout address",
+                                                       "4 Withdraw SOL", "5 Exit"])
+    order = ["if errorlevel 15 goto bye", "if errorlevel 14 goto withdraw", "if errorlevel 13 goto payout",
+             "if errorlevel 12 goto balance", "if errorlevel 11 goto mine"]
     pos = [launcher.find(x) for x in order]
-    ok("launcher menu keys (pick exits 10 + key) are tested highest first: 16 to 11 (the other way round would make every key mine)",
+    ok("launcher menu keys (pick exits 10 + key) are tested highest first: 15 to 11 (the other way round would make every key mine)",
        all(p >= 0 for p in pos) and pos == sorted(pos))
     ok("launcher never passes --yes, --y..., -y or /y to anything (any word starting that way): Withdraw and Set payout always ask",
        not any(tok.lower().startswith(("--y", "-y", "/y")) for l in lines for tok in l.split()))
@@ -385,14 +385,14 @@ def main():
        '"%PY%" sumo_miner.py menu 2>nul' in menu_part and "if errorlevel 1 goto menu_plain" in menu_part
        and menu_part.index("sumo_miner.py menu") < menu_part.index("if errorlevel 1 goto menu_plain") < menu_part.index("sumo_miner.py pick")
        and "goto menu_pick" in menu_part)
-    ok("launcher: the plain menu text is still all there (items 1-6 and its own 'Press a number from 1 to 6' choice)",
+    ok("launcher: the plain menu text is still all there (items 1-5 and its own 'Press a number from 1 to 5' choice)",
        all(f"echo     {i}   {label}" in plain_part for i, label in enumerate(
-           ("Mine SUMO", "Check balance", "Get test SOL", "Set payout address", "Withdraw SOL", "Exit"), 1))
-       and '<nul set /p "=  Press a number from 1 to 6: "' in plain_part and '"%PY%" sumo_miner.py pick' in plain_part)
-    ok("launcher: both menus read the key with 'sumo_miner.py pick' (no beep on other keys), check it highest first (16 to 11), and a crash (code below 11) is Exit, never Mine",
-       [l.strip() for l in pick_part.split("\n")[3:10]] ==
-       ["if errorlevel 16 goto bye", "if errorlevel 15 goto withdraw", "if errorlevel 14 goto payout",
-        "if errorlevel 13 goto faucet", "if errorlevel 12 goto balance", "if errorlevel 11 goto mine", "goto bye"]
+           ("Mine SUMO", "Check balance", "Set payout address", "Withdraw SOL", "Exit"), 1))
+       and '<nul set /p "=  Press a number from 1 to 5: "' in plain_part and '"%PY%" sumo_miner.py pick' in plain_part)
+    ok("launcher: both menus read the key with 'sumo_miner.py pick' (no beep on other keys), check it highest first (15 to 11), and a crash (code below 11) is Exit, never Mine",
+       [l.strip() for l in pick_part.split("\n")[3:9]] ==
+       ["if errorlevel 15 goto bye", "if errorlevel 14 goto withdraw", "if errorlevel 13 goto payout",
+        "if errorlevel 12 goto balance", "if errorlevel 11 goto mine", "goto bye"]
        and launcher.count('"%PY%" sumo_miner.py pick') == 2 and "choice" not in launcher and "if errorlevel" not in plain_part)
     ok("launcher: mining from the picture menu clears the screen first; a new wallet is still never made when an old one sits at the top",
        'if exist "%~dp0files\\sumo-devnet-key.json" goto mine_clear' in launcher
@@ -406,19 +406,28 @@ def main():
     ok("launcher MINING line says Ctrl+C asks first, and that closing the window works",
        "echo  ^>^> MINING... press Ctrl+C to stop (it asks first), or close this window." in launcher)
     ok("launcher MINING line escapes both arrows (^>^>)", "echo  ^>^> MINING" in launcher and ">^>" not in launcher.replace("^>^>", ""))
-    ok("launcher no longer sends people to menu option 3 for test SOL (faucet.solana.com is the real route)",
-       "choose 3" not in launcher and "https://faucet.solana.com" in launcher)
-    ok("launcher: a single key press picks 1-6; Ctrl+C or a crash exits, never mines",
-       "if errorlevel 16 goto bye" in launcher
+    ok("launcher has no Get test SOL menu item; faucet.solana.com is the public-devnet route",
+       "Get test SOL" not in launcher.replace("Get test SOL.bat", "") and "https://faucet.solana.com" in launcher
+       and ":faucet" not in launcher)
+    ok("launcher: a single key press picks 1-5; Ctrl+C or a crash exits, never mines",
+       "if errorlevel 15 goto bye" in launcher
        and launcher.index("if errorlevel 11 goto mine") < launcher.index("goto bye", launcher.index("if errorlevel 11 goto mine")))
     def section(label, until=None):
         text = launcher[launcher.index("\n:" + label + "\n"):]
         return text[:text.index("\n:" + until + "\n")] if until else text[:text.index("\n:", 5)]
-    for label, cmd, until in (("mine", "mine", "balance"), ("balance", "balance", None), ("faucet", "faucet", None),
+    for label, cmd, until in (("mine", "mine", "balance"), ("balance", "balance", None),
                               ("payout", "set-payout", None), ("withdraw", "withdraw", None)):
         ok(f"launcher :{label} runs sumo_miner.py {cmd} with the venv python",
            f'"%PY%" sumo_miner.py {cmd}' in section(label, until))
-    for label in ("balance", "faucet", "payout", "withdraw"):
+    ok("launcher still tries the faucet only when it first makes a wallet, not as a menu item",
+       '"%PY%" sumo_miner.py faucet' in section("mine", "balance") and ":faucet" not in launcher)
+    sys.path.insert(0, miner_dir)
+    import sumo_menu as menu_mod
+    ok("picture menu ITEMS match the launcher (no Get test SOL) and both use 1-5",
+       list(menu_mod.ITEMS) == ["Mine SUMO", "Check balance", "Set payout address", "Withdraw SOL", "Exit"]
+       and menu_mod.PROMPT == "Press a number from 1 to 5"
+       and "Get test SOL" not in menu_mod.ITEMS)
+    for label in ("balance", "payout", "withdraw"):
         ok(f"launcher :{label} comes back to the menu afterwards", "goto done" in section(label) or "goto menu" in section(label))
     done_block = launcher[launcher.index("\n:done\n"):]
     done_block = done_block[:done_block.index("\n:", 5)]

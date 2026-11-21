@@ -84,10 +84,10 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 <p>Updating from an older miner? Extract into the <strong>same</strong> folder and choose <strong>Replace the files</strong>. Your wallet file <code>sumo-devnet-key.json</code> is not in the zip, so it stays as it is. The first time you run SUMO Frog.bat it moves that wallet into the new <strong>files</strong> folder. <strong>Never delete</strong> <code>sumo-devnet-key.json</code>, wherever it is: it holds your test SUMO. If the miner says "Two wallets found", it has stopped on purpose: read what it says and don't delete anything. Delete the five old buttons next to SUMO Frog.bat if they're still there (<strong>Mine SUMO.bat</strong>, <strong>Check balance.bat</strong>, <strong>Get test SOL.bat</strong>, <strong>Set payout address.bat</strong> and <strong>Withdraw SOL.bat</strong>) and the old <strong>HOW TO MINE.txt</strong> next to SUMO Frog.bat. The old Mine SUMO.bat can make a second wallet. Delete only those files, never the wallet.</p>
 <h2>3. Double-click "SUMO Frog"</h2>
 <ol>
-<li>Double-click <strong>SUMO Frog.bat</strong>. A menu appears: <strong>1 Mine SUMO</strong>, <strong>2 Check balance</strong>, <strong>3 Get test SOL</strong>, <strong>4 Set payout address</strong>, <strong>5 Withdraw SOL</strong>, <strong>6 Exit</strong>.</li>
+<li>Double-click <strong>SUMO Frog.bat</strong>. A menu appears: <strong>1 Mine SUMO</strong>, <strong>2 Check balance</strong>, <strong>3 Set payout address</strong>, <strong>4 Withdraw SOL</strong>, <strong>5 Exit</strong>.</li>
 <li>If Windows says <strong>"Windows protected your PC"</strong>, click <strong>More info</strong>, then <strong>Run anyway</strong>. It's a plain text script; you can right-click it and choose <strong>Edit</strong> to see exactly what it does.</li>
 <li>Press <strong>1</strong>. The first time, it sets itself up for about a minute, makes your test wallet and shows its address, then says it needs test SOL. That's normal.</li>
-<li>Get free test SOL: open <strong><a href="https://faucet.solana.com">https://faucet.solana.com</a></strong>, sign in with GitHub, pick <strong>Devnet</strong>, paste the wallet address from step 3 (or press <strong>2</strong> in the menu, Check balance, to see it again), and request the most it allows. Menu option 3 (Get test SOL) usually fails on public devnet; use the website instead.</li>
+<li>Get free test SOL: open <strong><a href="https://faucet.solana.com">https://faucet.solana.com</a></strong>, sign in with GitHub, pick <strong>Devnet</strong>, paste the wallet address from step 3 (or press <strong>2</strong> in the menu, Check balance, to see it again), and request the most it allows.</li>
 <li>Double-click <strong>SUMO Frog.bat</strong> again and press <strong>1</strong>. Mining starts. Leave the window open.</li>
 </ol>
 <p><img alt="The miner while it's working: the box on the right says &quot;&gt;&gt; MINING...&quot;" src="screens/miner_mining.png" /></p>
@@ -141,7 +141,7 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 <h2>4. Send rewards to your own wallet (optional)</h2>
 <p>By default, rewards stay in the miner's own test wallet. To send them to a wallet you already use:</p>
 <ol>
-<li>In the menu, press <strong>4</strong> (Set payout address).</li>
+<li>In the menu, press <strong>3</strong> (Set payout address).</li>
 <li>Paste your wallet's <strong>public address</strong> (the one you'd share to receive coins) and press Enter.</li>
 <li>Check the address it shows you, then type <strong>YES</strong>.</li>
 </ol>
@@ -155,7 +155,7 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 <h2>7. Take your test SOL back out (optional)</h2>
 <p>When you've finished mining on a PC, you can send the miner's leftover test SOL to your own wallet:</p>
 <ol>
-<li>In the menu, press <strong>5</strong> (Withdraw SOL).</li>
+<li>In the menu, press <strong>4</strong> (Withdraw SOL).</li>
 <li>Paste your wallet's <strong>public address</strong>, or just press Enter to use your payout address (it shows it and asks you to confirm).</li>
 <li>It shows how much test SOL it will send, where to, and the fee. Type <strong>y</strong> to send, or press Enter to cancel.</li>
 </ol>
@@ -172,7 +172,7 @@ footer { padding:16px 36px 24px; border-top:4px solid var(--magenta); color:var(
 </ul>
 <h2>If something goes wrong</h2>
 <ul>
-<li><strong>"needs a little test SOL for fees"</strong>: get free devnet SOL at <strong>https://faucet.solana.com</strong> (sign in with GitHub, pick Devnet, paste your miner wallet address), then start mining again. Menu option 3 usually fails on public devnet.</li>
+<li><strong>"needs a little test SOL for fees"</strong>: get free devnet SOL at <strong>https://faucet.solana.com</strong> (sign in with GitHub, pick Devnet, paste your miner wallet address), then start mining again.</li>
 <li><strong>"Python isn't installed yet"</strong>: do step 1, then double-click <strong>SUMO Frog.bat</strong> again.</li>
 <li><strong>"Install failed"</strong>: check your internet connection and try again.</li>
 <li><strong>"Another miner got there first"</strong>: that's normal. Someone else won that block, and the miner moves on to the next one by itself.</li>

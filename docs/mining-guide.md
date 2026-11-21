@@ -27,10 +27,10 @@ Not sure if you have it? Skip this step. If Python is missing, the miner says "P
 
 ## 3. Double-click "SUMO Frog"
 
-1. Double-click **SUMO Frog.bat**. A menu appears: **1 Mine SUMO**, **2 Check balance**, **3 Get test SOL**, **4 Set payout address**, **5 Withdraw SOL**, **6 Exit**.
+1. Double-click **SUMO Frog.bat**. A menu appears: **1 Mine SUMO**, **2 Check balance**, **3 Set payout address**, **4 Withdraw SOL**, **5 Exit**.
 2. If Windows says **"Windows protected your PC"**, click **More info**, then **Run anyway**. It's a plain text script; you can right-click it and choose **Edit** to see exactly what it does.
 3. Press **1**. The first time, it sets itself up for about a minute, makes your test wallet and shows its address, then says it needs test SOL. That's normal.
-4. Get free test SOL: open **[https://faucet.solana.com](https://faucet.solana.com)**, sign in with GitHub, pick **Devnet**, paste the wallet address from step 3 (or press **2** in the menu, Check balance, to see it again), and request the most it allows. Menu option 3 (Get test SOL) usually fails on public devnet; use the website instead.
+4. Get free test SOL: open **[https://faucet.solana.com](https://faucet.solana.com)**, sign in with GitHub, pick **Devnet**, paste the wallet address from step 3 (or press **2** in the menu, Check balance, to see it again), and request the most it allows.
 5. Double-click **SUMO Frog.bat** again and press **1**. Mining starts. Leave the window open.
 
 ![The miner while it's working: the box on the right says ">> MINING..."](screens/miner_mining.png)
@@ -60,7 +60,7 @@ If the window is narrow, the miner hides the frog picture and just shows the num
 
 By default, rewards stay in the miner's own test wallet. To send them to a wallet you already use:
 
-1. In the menu, press **4** (Set payout address).
+1. In the menu, press **3** (Set payout address).
 2. Paste your wallet's **public address** (the one you'd share to receive coins) and press Enter.
 3. Check the address it shows you, then type **YES**.
 
@@ -82,7 +82,7 @@ Press **Ctrl+C**. The miner asks "Stop mining?": press **Y** to stop and go back
 
 When you've finished mining on a PC, you can send the miner's leftover test SOL to your own wallet:
 
-1. In the menu, press **5** (Withdraw SOL).
+1. In the menu, press **4** (Withdraw SOL).
 2. Paste your wallet's **public address**, or just press Enter to use your payout address (it shows it and asks you to confirm).
 3. It shows how much test SOL it will send, where to, and the fee. Type **y** to send, or press Enter to cancel.
 
@@ -102,7 +102,7 @@ Advanced: `sumo_miner.py withdraw YOUR_PUBLIC_ADDRESS --sumo --yes` sends SOL an
 
 ## If something goes wrong
 
-- **"needs a little test SOL for fees"**: get free devnet SOL at **https://faucet.solana.com** (sign in with GitHub, pick Devnet, paste your miner wallet address), then start mining again. Menu option 3 usually fails on public devnet.
+- **"needs a little test SOL for fees"**: get free devnet SOL at **https://faucet.solana.com** (sign in with GitHub, pick Devnet, paste your miner wallet address), then start mining again.
 - **"Python isn't installed yet"**: do step 1, then double-click **SUMO Frog.bat** again.
 - **"Install failed"**: check your internet connection and try again.
 - **"Another miner got there first"**: that's normal. Someone else won that block, and the miner moves on to the next one by itself.

@@ -66,8 +66,8 @@ LOGO = [
 
 FROG[18] = FROG[18].replace('V', '.')   # one stray purple pixel from the crop
 
-ITEMS = ["Mine SUMO", "Check balance", "Get test SOL", "Set payout address", "Withdraw SOL", "Exit"]
-PROMPT = "Press a number from 1 to 6"
+ITEMS = ["Mine SUMO", "Check balance", "Set payout address", "Withdraw SOL", "Exit"]
+PROMPT = "Press a number from 1 to 5"
 PROMPT_ROW = 26
 PROMPT_COL = (COLS - len(PROMPT) - 2) // 2
 
@@ -146,7 +146,7 @@ def build_grid(version, wallet_text, wallet_ok, balance_text, balance_ok, select
     put(14, 75 - len(balance_text), balance_text, YELLOW if balance_ok else GREY, PANEL)
 
     mc0, mc1 = 16, 63
-    box(17, mc0, 24, mc1, DOUBLE, PINK, PANEL)
+    box(17, mc0, 23, mc1, DOUBLE, PINK, PANEL)
     put(17, mc0 + 2, " MAIN MENU ", YELLOW, PANEL)
     for i, label in enumerate(ITEMS):
         r = 18 + i
@@ -162,7 +162,7 @@ def build_grid(version, wallet_text, wallet_ok, balance_text, balance_ok, select
 
     put(PROMPT_ROW, PROMPT_COL, PROMPT, CREAM)
     put(PROMPT_ROW, PROMPT_COL + PROMPT.index("1"), "1", YELLOW)
-    put(PROMPT_ROW, PROMPT_COL + PROMPT.index("6"), "6", YELLOW)
+    put(PROMPT_ROW, PROMPT_COL + PROMPT.index("5"), "5", YELLOW)
     put(PROMPT_ROW, PROMPT_COL + len(PROMPT) + 1, FULL, YELLOW)
 
     for c in range(COLS):
