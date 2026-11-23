@@ -6,7 +6,7 @@
   (template below)     -> docs/index.html    (home page)
   (template below)     -> stats/index.html and docs/stats/index.html
   (docs/stats is the GitHub Pages copy, with a public-devnet config; default RPC is public devnet)
-  mockups_8bit/v4      -> home header + metadata frog in docs/, stats/ and assets/
+  mockups_8bit/v4      -> home header + mascot frog (sumo_frog.png) in docs/, stats/ and assets/
   art/pixy             -> per-page headers, $SUMO token logo and favicons
 
 Fonts (Press Start 2P, DotGothic16, SIL OFL) are embedded in each page, so every page is one
@@ -293,7 +293,8 @@ def images():
     hdr = Image.open(os.path.join(V4, "site_header.png")).convert("RGB").crop((0, 0, 960, 144))
     frog = Image.open(os.path.join(V4, "sumo_frog_512.png")).convert("RGBA")
     # Pixy's $SUMO token: favicon and small logo. Home still uses the thin v4 header.
-    # The frog stays the mascot (headers + metadata image), not the token.
+    # The frog stays the mascot (headers + sumo_frog.png). The token picture is
+    # Pixy's belt-knot coin (sumo_logo.png), copied from token_256 below.
     token_256 = os.path.join(pixy, "token_256.png")
     token_32 = os.path.join(pixy, "token_32.png")
     token_16 = os.path.join(pixy, "token_16.png")
@@ -310,13 +311,14 @@ def images():
     save_jpeg(os.path.join(pixy, "header_guide.jpg"), os.path.join(ROOT, "docs", "header_guide.jpg"))
     save_jpeg(os.path.join(pixy, "header_whitepaper.jpg"), os.path.join(ROOT, "docs", "header_whitepaper.jpg"))
     save_jpeg(os.path.join(pixy, "header_stats.jpg"), os.path.join(ROOT, "stats", "header_stats.jpg"))
-    # token metadata image (GitHub Pages serves docs/sumo_frog.png): 512px pixel frog on navy
+    # Mascot frog still served at docs/sumo_frog.png (copies in stats/ and assets/ too).
+    # Other pages may use it. Token metadata picture is docs/sumo_logo.png, not this file.
     meta = Image.new("RGBA", (512, 512), (14, 16, 48, 255))
     meta.alpha_composite(frog)
     meta.convert("RGB").save(os.path.join(ROOT, "stats", "sumo_frog.png"), optimize=True)
     shutil.copy(os.path.join(ROOT, "stats", "sumo_frog.png"), os.path.join(ROOT, "assets", "sumo_frog.png"))
     shutil.copy(os.path.join(ROOT, "stats", "sumo_frog.png"), os.path.join(ROOT, "docs", "sumo_frog.png"))
-    print("wrote header, logo and metadata images")
+    print("wrote header, token logo and mascot frog images")
 
 
 

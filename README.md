@@ -34,9 +34,9 @@ cp stats/sumo_config.example.js stats/sumo_config.js
 ```
 
 Public token metadata (name, symbol and picture) is the tracked file `docs/metadata.json`,
-with the picture at `docs/sumo_frog.png`. Planned GitHub Pages URL (serving the `docs/` folder):
+with the picture at `docs/sumo_logo.png` (Pixy's belt-knot coin). Planned GitHub Pages URL (serving the `docs/` folder):
 `https://lebongo420.github.io/sumofrog/metadata.json` and
-`https://lebongo420.github.io/sumofrog/sumo_frog.png`.
+`https://lebongo420.github.io/sumofrog/sumo_logo.png`.
 The same metadata is in `assets/metadata.example.json`. Do not use the gitignored
 `assets/metadata.json`. Creating or locking on-chain metadata (`is_mutable` off) is pending
 Josh's confirmation of the final name and picture link.

@@ -124,7 +124,9 @@ def main():
     ok("staged example has no raw IPv4", b.IPV4.search(published) is None)
     ok("staged site includes public metadata and the token picture",
        os.path.isfile(os.path.join(dest, "metadata.json"))
-       and os.path.isfile(os.path.join(dest, "sumo_frog.png")))
+       and os.path.isfile(os.path.join(dest, "sumo_logo.png")))
+    ok("staged site still includes the mascot frog image",
+       os.path.isfile(os.path.join(dest, "sumo_frog.png")))
     ok("home page was staged", os.path.isfile(os.path.join(dest, "index.html")))
     ok("stats page was staged under dest/stats", os.path.isfile(os.path.join(dest, "stats", "index.html")))
     staged_home = open(os.path.join(dest, "index.html"), encoding="utf-8").read()
@@ -572,12 +574,15 @@ def main():
         meta = open(os.path.join(b.ROOT, rel), encoding="utf-8").read()
         ok(f"{rel}: public name and symbol", '"name": "Sumo Frog"' in meta and '"symbol": "SUMO"' in meta)
         ok(f"{rel}: https Pages image, no private gateway",
-           "https://lebongo420.github.io/sumofrog/sumo_frog.png" in meta
+           "https://lebongo420.github.io/sumofrog/sumo_logo.png" in meta
+           and "sumo_frog.png" not in meta
            and ":8080" not in meta and "YOUR_SERVER" not in meta and "http://" not in meta
            and "private test network" not in meta.lower())
         ok(f"{rel}: devnet / test-only wording",
            "devnet" in meta.lower() and "worthless" in meta.lower())
-    ok("docs/sumo_frog.png is present for Pages",
+    ok("docs/sumo_logo.png is present for Pages",
+       os.path.isfile(os.path.join(b.ROOT, "docs", "sumo_logo.png")))
+    ok("docs/sumo_frog.png is still present for Pages",
        os.path.isfile(os.path.join(b.ROOT, "docs", "sumo_frog.png")))
 
     print(f"site publish checks: {passed} passed")
