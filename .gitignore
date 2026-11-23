@@ -28,6 +28,9 @@ miner/sumo_config.json
 stats/sumo_config.js
 assets/metadata.json
 
+# local dry-run draft; not for the public repo
+scripts/create-metadata.ts
+
 # build / ledger / deps (also keep existing)
 .anchor/
 target/
