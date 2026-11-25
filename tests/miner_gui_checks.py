@@ -259,4 +259,24 @@ if tk_ok:
     else:
         ok("no display; widget construction skipped (ok on a headless run without Xvfb)", True)
 
+
+# ---- branding and the sprite drop-in folder ----
+brand = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "miner", "branding")
+ok("coin logo and frog picture ship with the miner",
+   os.path.isfile(os.path.join(brand, "sumo_logo.png"))
+   and os.path.isfile(os.path.join(brand, "sumo_frog.png")))
+ok("PyInstaller spec includes the branding folder", "branding" in spec_src)
+empty = tempfile.mkdtemp()
+ok("empty sprite folder uses the still frog (None, None)",
+   g.find_sprite_source(empty) == (None, None))
+open(os.path.join(empty, "frame_002.png"), "w").write("")
+open(os.path.join(empty, "frame_001.png"), "w").write("")
+kind, frames = g.find_sprite_source(empty)
+ok("PNG frames in branding/sprites are picked up in order",
+   kind == "frames" and [os.path.basename(p) for p in frames] == ["frame_001.png", "frame_002.png"])
+open(os.path.join(empty, "frog.gif"), "w").write("")
+kind, path = g.find_sprite_source(empty)
+ok("a frog.gif in the sprites folder wins over loose frames",
+   kind == "gif" and os.path.basename(path) == "frog.gif")
+
 print(f"{passed} GUI checks passed")

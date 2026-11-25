@@ -17,6 +17,9 @@ for name, dest in (
 ):
     if os.path.isfile(name):
         datas.append((name, dest))
+branding = os.path.join(SPEC_DIR, "branding")
+if os.path.isdir(branding):
+    datas.append((branding, "branding"))
 
 hiddenimports = [
     "solders",
@@ -30,6 +33,13 @@ hiddenimports = [
     "tkinter",
     "tkinter.font",
     "tkinter.messagebox",
+    "PIL",
+    "PIL.Image",
+    "PIL.ImageTk",
+    "PIL.ImageDraw",
+    "PIL.ImageFont",
+    "PIL.ImageSequence",
+    "PIL.ImageGrab",
 ]
 
 a = Analysis(
