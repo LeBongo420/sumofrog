@@ -42,6 +42,7 @@ def src_of(*rel):
 gui_src = src_of("miner/sumo_gui.py")
 spec_src = src_of("miner/sumo_gui.spec")
 wf_src = src_of(".github/workflows/windows-miner.yml")
+win_req_src = src_of("miner/requirements-windows-build.txt")
 
 ok("user-facing GUI source never says 'nonce' (it must say guess #)",
    "nonce" not in gui_src.lower())
@@ -319,6 +320,36 @@ ok("oversized pixel dimensions are refused",
    (not g.sprite_image_ok((g.MAX_SPRITE_EDGE + 1, 10)))
    and g.sprite_image_ok((1, 1)))
 
+# paths that resolve outside the sprite folder are refused
+outside = tempfile.mkdtemp()
+tiny_png(os.path.join(outside, "secret.png"))
+linked = tempfile.mkdtemp()
+outside_link = os.path.join(linked, "frame_001.png")
+os.symlink(os.path.join(outside, "secret.png"), outside_link)
+ok("a symlink pointing outside the sprite folder is skipped",
+   (not g.sprite_path_in_folder(linked, outside_link))
+   and (not g.sprite_file_ok(linked, outside_link))
+   and g.find_sprite_source(linked) == (None, None))
+tiny_png(os.path.join(linked, "frame_002.png"))
+kind, frames = g.find_sprite_source(linked)
+ok("a real file in the folder is kept when a symlink points outside",
+   kind == "frames" and [os.path.basename(p) for p in frames] == ["frame_002.png"])
+inside_link_dir = tempfile.mkdtemp()
+tiny_png(os.path.join(inside_link_dir, "frame_001.png"))
+os.symlink(os.path.join(inside_link_dir, "frame_001.png"),
+           os.path.join(inside_link_dir, "frame_002.png"))
+kind, frames = g.find_sprite_source(inside_link_dir)
+ok("a symlink that stays inside the sprite folder is still accepted",
+   kind == "frames" and [os.path.basename(p) for p in frames] == ["frame_001.png", "frame_002.png"])
+# If the drop-in folder itself is an alias to another directory, refuse it.
+real_frames = tempfile.mkdtemp()
+tiny_png(os.path.join(real_frames, "frame_001.png"))
+alias_parent = tempfile.mkdtemp()
+alias_folder = os.path.join(alias_parent, "sprites")
+os.symlink(real_frames, alias_folder)
+ok("a sprite folder that is itself a symlink to another directory is refused",
+   g.find_sprite_source(alias_folder) == (None, None))
+
 # ---- payout save asks Yes/Cancel and shows the full address ----
 ok("payout confirm uses a Yes/Cancel dialog",
    "askyescancel" in gui_src and "payout_confirm_text" in gui_src)
@@ -337,7 +368,15 @@ ok("workflow pins checkout, setup-python and upload-artifact to full commit SHAs
    and re.search(r"actions/upload-artifact@[0-9a-f]{40}", wf_src)
    and "checkout@v4\n" not in wf_src.replace("\r\n", "\n")
    and "setup-python@v5\n" not in wf_src.replace("\r\n", "\n"))
-ok("workflow pins an exact Pillow version",
-   'pillow==13.0.0' in wf_src or "pillow==" in wf_src)
+ok("Windows build requirements pin exact pyinstaller, solders and Pillow versions",
+   "pyinstaller==6.22.3" in win_req_src
+   and "solders==0.29.0" in win_req_src
+   and "pillow==13.0.0" in win_req_src
+   and "solders>=" not in win_req_src)
+ok("workflow installs those pinned packages from the Windows build requirements file",
+   "miner/requirements-windows-build.txt" in wf_src
+   and "solders>=" not in wf_src
+   and "pyinstaller==" not in wf_src  # versions live in the requirements file
+   and "solders==" not in wf_src)
 
 print(f"{passed} GUI checks passed")

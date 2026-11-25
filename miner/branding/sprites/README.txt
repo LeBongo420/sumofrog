@@ -9,8 +9,8 @@ finds here, in this order:
 
 To keep the window light, it accepts at most 48 frames, each file at
 most 2 MB, and each picture at most 1024 pixels on a side. Larger or
-extra files are skipped, and the still frog picture is used if nothing
-valid is left.
+extra files are skipped, as are aliases that point outside this folder,
+and the still frog picture is used if nothing valid is left.
 
 Leave this folder otherwise empty and the miner shows the still frog
 picture until frames are added. No code change is needed.

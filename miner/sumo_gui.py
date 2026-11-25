@@ -275,10 +275,24 @@ def sprite_frames_dir():
     return os.path.join(branding_dir(), "sprites")
 
 
-def sprite_file_ok(path):
-    """True when the file exists and is within the size cap."""
+def sprite_path_in_folder(folder, path):
+    """True when path resolves inside folder (blocks symlinks and .. that escape)."""
     try:
-        return os.path.isfile(path) and 0 < os.path.getsize(path) <= MAX_SPRITE_FILE_BYTES
+        root = os.path.normcase(os.path.abspath(folder))
+        real = os.path.normcase(os.path.realpath(path))
+        return os.path.commonpath([root, real]) == root
+    except (OSError, ValueError):
+        return False
+
+
+def sprite_file_ok(folder, path):
+    """True when the file resolves inside folder, exists, and is within the size cap."""
+    try:
+        return (
+            sprite_path_in_folder(folder, path)
+            and os.path.isfile(path)
+            and 0 < os.path.getsize(path) <= MAX_SPRITE_FILE_BYTES
+        )
     except OSError:
         return False
 
@@ -294,13 +308,13 @@ def sprite_image_ok(size):
 
 def find_sprite_source(folder):
     """('gif', path), ('frames', [paths]) or (None, None).
-    Only files in this folder that pass the size cap; at most MAX_SPRITE_FRAMES frames."""
+    Only files that resolve inside this folder and pass the size cap; at most MAX_SPRITE_FRAMES frames."""
     if not os.path.isdir(folder):
         return None, None
     names = sorted(os.listdir(folder))
 
     def ok(name):
-        return sprite_file_ok(os.path.join(folder, name))
+        return sprite_file_ok(folder, os.path.join(folder, name))
 
     if "frog.gif" in names and ok("frog.gif"):
         return "gif", os.path.join(folder, "frog.gif")

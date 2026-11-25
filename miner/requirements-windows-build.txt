@@ -1,0 +1,5 @@
+# Pins for the manual Windows GUI build only (Python 3.12 on windows-latest).
+# The console miner zip still uses requirements.txt.
+pyinstaller==6.22.3
+solders==0.29.0
+pillow==13.0.0
