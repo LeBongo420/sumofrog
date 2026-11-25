@@ -132,6 +132,17 @@ def write_saved_payout(pk):
         f.write(str(pk) + "\n")
 
 
+def payout_confirm_text(pk):
+    """Yes/Cancel dialog body. Always includes the full public address."""
+    return (
+        "Rewards will go to this PUBLIC address from the next block:\n\n"
+        f"{pk}\n\n"
+        "Check every character. The local test wallet still pays the fees.\n"
+        "There is no tip or developer fee.\n\n"
+        "Save this address?"
+    )
+
+
 def try_parse_payout(text, settings):
     """Return (pubkey, None) or (None, reason). Never accepts a seed phrase or private key."""
     try:
@@ -252,26 +263,54 @@ def branding_dir():
     return os.path.join(bundled_dir(), "branding")
 
 
+# Caps on drop-in animation so a huge pack cannot freeze the window.
+MAX_SPRITE_FRAMES = 48
+MAX_SPRITE_FILE_BYTES = 2 * 1024 * 1024
+MAX_SPRITE_EDGE = 1024
+MAX_SPRITE_PIXELS = 1024 * 1024
+
+
 def sprite_frames_dir():
-    """Pixy's animated frog drops in here (frog.gif, or frame_001.png, frame_002.png, ...)."""
-    override = os.environ.get("SUMO_GUI_SPRITES")
-    if override:
-        return os.path.abspath(override)
+    """Pixy's animated frog drops in here only (frog.gif, or frame_001.png, ...)."""
     return os.path.join(branding_dir(), "sprites")
 
 
+def sprite_file_ok(path):
+    """True when the file exists and is within the size cap."""
+    try:
+        return os.path.isfile(path) and 0 < os.path.getsize(path) <= MAX_SPRITE_FILE_BYTES
+    except OSError:
+        return False
+
+
+def sprite_image_ok(size):
+    """True when a frame's pixel size is within the cap."""
+    try:
+        w, h = size
+    except (TypeError, ValueError):
+        return False
+    return w > 0 and h > 0 and w <= MAX_SPRITE_EDGE and h <= MAX_SPRITE_EDGE and (w * h) <= MAX_SPRITE_PIXELS
+
+
 def find_sprite_source(folder):
-    """('gif', path), ('frames', [paths]) or (None, None). Pure, so it is easy to test."""
+    """('gif', path), ('frames', [paths]) or (None, None).
+    Only files in this folder that pass the size cap; at most MAX_SPRITE_FRAMES frames."""
     if not os.path.isdir(folder):
         return None, None
     names = sorted(os.listdir(folder))
-    gifs = [n for n in names if n.lower().endswith(".gif")]
-    if "frog.gif" in names:
+
+    def ok(name):
+        return sprite_file_ok(os.path.join(folder, name))
+
+    if "frog.gif" in names and ok("frog.gif"):
         return "gif", os.path.join(folder, "frog.gif")
+    gifs = [n for n in names if n.lower().endswith(".gif") and ok(n)]
     if gifs:
         return "gif", os.path.join(folder, gifs[0])
     frames = [n for n in names if n.lower().endswith(".png")
-              and (n.lower().startswith("frame_") or n.lower().startswith("frog_"))]
+              and (n.lower().startswith("frame_") or n.lower().startswith("frog_"))
+              and ok(n)]
+    frames = frames[:MAX_SPRITE_FRAMES]
     if frames:
         return "frames", [os.path.join(folder, n) for n in frames]
     return None, None
@@ -647,11 +686,17 @@ class MinerApp:
             from PIL import Image, ImageSequence, ImageTk
             if kind == "gif":
                 gif = Image.open(src)
-                for fr in ImageSequence.Iterator(gif):
-                    frames.append(ImageTk.PhotoImage(fr.convert("RGBA").resize((size, size), Image.NEAREST)))
+                if sprite_image_ok(gif.size):
+                    for i, fr in enumerate(ImageSequence.Iterator(gif)):
+                        if i >= MAX_SPRITE_FRAMES:
+                            break
+                        if sprite_image_ok(fr.size):
+                            frames.append(ImageTk.PhotoImage(fr.convert("RGBA").resize((size, size), Image.NEAREST)))
             elif kind == "frames":
-                for p in src:
-                    frames.append(ImageTk.PhotoImage(Image.open(p).convert("RGBA").resize((size, size), Image.NEAREST)))
+                for pth in src[:MAX_SPRITE_FRAMES]:
+                    im = Image.open(pth)
+                    if sprite_image_ok(im.size):
+                        frames.append(ImageTk.PhotoImage(im.convert("RGBA").resize((size, size), Image.NEAREST)))
         except Exception:
             frames = []
         if not frames:
@@ -768,6 +813,13 @@ class MinerApp:
             return
         if self.kp is not None and pk == self.kp.pubkey():
             self._clear_payout()
+            return
+        if not messagebox.askyescancel(
+            "Save payout address?",
+            payout_confirm_text(pk),
+            parent=self.root,
+        ):
+            self._log("Payout not saved.")
             return
         write_saved_payout(pk)
         self.payout = pk

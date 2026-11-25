@@ -1,3 +1,7 @@
-Press Start 2P (Codeman38) and Outfit (Google Fonts)
-are included under the SIL Open Font License, Version 1.1.
-https://scripts.sil.org/OFL
+Press Start 2P (CodeMan38 / The Press Start 2P Project Authors)
+and Outfit (The Outfit Project Authors / Rodrigo Fuenzalida, fragTYPE)
+are licensed under the SIL Open Font License, Version 1.1.
+
+The licence text and copyright notice for each font are in:
+  PressStart2P-OFL.txt
+  Outfit-OFL.txt

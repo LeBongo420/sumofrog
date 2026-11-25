@@ -260,23 +260,84 @@ if tk_ok:
         ok("no display; widget construction skipped (ok on a headless run without Xvfb)", True)
 
 
-# ---- branding and the sprite drop-in folder ----
+# ---- branding, licences, and the sprite drop-in folder ----
 brand = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "miner", "branding")
 ok("coin logo and frog picture ship with the miner",
    os.path.isfile(os.path.join(brand, "sumo_logo.png"))
    and os.path.isfile(os.path.join(brand, "sumo_frog.png")))
 ok("PyInstaller spec includes the branding folder", "branding" in spec_src)
+fonts = os.path.join(brand, "fonts")
+press_ofl = open(os.path.join(fonts, "PressStart2P-OFL.txt"), encoding="utf-8").read()
+outfit_ofl = open(os.path.join(fonts, "Outfit-OFL.txt"), encoding="utf-8").read()
+ok("Press Start 2P ships with its OFL text and copyright notice",
+   "Copyright 2012 The Press Start 2P Project Authors" in press_ofl
+   and "SIL Open Font License, Version 1.1" in press_ofl
+   and "Reserved Font Name" in press_ofl)
+ok("Outfit ships with its OFL text and copyright notice",
+   "Copyright 2021 The Outfit Project Authors" in outfit_ofl
+   and "SIL Open Font License, Version 1.1" in outfit_ofl)
+
+ok("sprites cannot be pointed at an arbitrary folder",
+   "SUMO_GUI_SPRITES" not in gui_src
+   and g.sprite_frames_dir().replace("\\", "/").endswith("branding/sprites"))
+
+def tiny_png(path):
+    from PIL import Image
+    Image.new("RGBA", (1, 1), (0, 0, 0, 0)).save(path)
+
+
 empty = tempfile.mkdtemp()
 ok("empty sprite folder uses the still frog (None, None)",
    g.find_sprite_source(empty) == (None, None))
-open(os.path.join(empty, "frame_002.png"), "w").write("")
-open(os.path.join(empty, "frame_001.png"), "w").write("")
+tiny_png(os.path.join(empty, "frame_002.png"))
+tiny_png(os.path.join(empty, "frame_001.png"))
 kind, frames = g.find_sprite_source(empty)
 ok("PNG frames in branding/sprites are picked up in order",
    kind == "frames" and [os.path.basename(p) for p in frames] == ["frame_001.png", "frame_002.png"])
-open(os.path.join(empty, "frog.gif"), "w").write("")
+tiny_png(os.path.join(empty, "frog.gif"))  # name wins; size cap is what matters here
+# a 1x1 PNG saved with a .gif suffix is not a GIF, but find_sprite_source only checks name+size
 kind, path = g.find_sprite_source(empty)
 ok("a frog.gif in the sprites folder wins over loose frames",
    kind == "gif" and os.path.basename(path) == "frog.gif")
+
+# size and frame caps
+big = tempfile.mkdtemp()
+oversized = os.path.join(big, "frame_001.png")
+with open(oversized, "wb") as f:
+    f.write(b"\x00" * (g.MAX_SPRITE_FILE_BYTES + 1))
+tiny_png(os.path.join(big, "frame_002.png"))
+kind, frames = g.find_sprite_source(big)
+ok("files over the size cap are skipped",
+   kind == "frames" and [os.path.basename(p) for p in frames] == ["frame_002.png"])
+many = tempfile.mkdtemp()
+for i in range(g.MAX_SPRITE_FRAMES + 5):
+    tiny_png(os.path.join(many, f"frame_{i:03d}.png"))
+kind, frames = g.find_sprite_source(many)
+ok("frame list is capped",
+   kind == "frames" and len(frames) == g.MAX_SPRITE_FRAMES)
+ok("oversized pixel dimensions are refused",
+   (not g.sprite_image_ok((g.MAX_SPRITE_EDGE + 1, 10)))
+   and g.sprite_image_ok((1, 1)))
+
+# ---- payout save asks Yes/Cancel and shows the full address ----
+ok("payout confirm uses a Yes/Cancel dialog",
+   "askyescancel" in gui_src and "payout_confirm_text" in gui_src)
+pk = Keypair().pubkey()
+msg = g.payout_confirm_text(pk)
+ok("payout confirm shows the full public address",
+   str(pk) in msg and msg.splitlines().count(str(pk)) == 1)
+ok("payout confirm asks the user to check the address",
+   "Check every character" in msg and "Save this address?" in msg)
+
+# workflow pins
+import re
+ok("workflow pins checkout, setup-python and upload-artifact to full commit SHAs",
+   re.search(r"actions/checkout@[0-9a-f]{40}", wf_src)
+   and re.search(r"actions/setup-python@[0-9a-f]{40}", wf_src)
+   and re.search(r"actions/upload-artifact@[0-9a-f]{40}", wf_src)
+   and "checkout@v4\n" not in wf_src.replace("\r\n", "\n")
+   and "setup-python@v5\n" not in wf_src.replace("\r\n", "\n"))
+ok("workflow pins an exact Pillow version",
+   'pillow==13.0.0' in wf_src or "pillow==" in wf_src)
 
 print(f"{passed} GUI checks passed")
